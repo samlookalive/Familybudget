@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.3.7";
+const APP_VERSION = "1.3.8";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -59,6 +59,14 @@ const sb = {
     const text = await res.text();
     if (!text) return [];
     try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
+  },
+
+  async delete(table, match, token) {
+    const q = Object.entries(match).map(([k,v])=>`${k}=eq.${v}`).join("&");
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, {
+      method: "DELETE",
+      headers: sb.authHeaders(token),
+    });
   },
 
   async upsert(table, data, onConflict, token) {
