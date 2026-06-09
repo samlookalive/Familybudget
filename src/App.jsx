@@ -2442,7 +2442,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.2.4",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.2.5",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -2595,10 +2595,12 @@ function SettingsScreen() {
 
 
 function FamilyInfoCard() {
-  const { token, profile, handleSignOut } = useApp();
+  const { token, profile, handleSignOut, setProfile, setTransactions, setRecurring } = useApp();
   const [family,  setFamily]  = useState(null);
   const [copied,  setCopied]  = useState(false);
   const [loading, setLoading] = useState(true);
+  const [confirm, setConfirm] = useState(null); // null | "leave" | "delete"
+  const [working, setWorking] = useState(false);
 
   useEffect(() => {
     if (!profile?.family_id || !token) { setLoading(false); return; }
@@ -2609,50 +2611,133 @@ function FamilyInfoCard() {
 
   const copyCode = () => {
     if (!family?.invite_code) return;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(family.invite_code);
-    }
+    if (navigator.clipboard) navigator.clipboard.writeText(family.invite_code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // 가족 탈퇴 (나만)
+  const handleLeave = async () => {
+    setWorking(true);
+    try {
+      await sb.update("profiles", { family_id: null, role: "member" }, { id: profile.id }, token);
+      setProfile(p => ({ ...p, family_id: null }));
+      setTransactions([]);
+      setRecurring([]);
+      setConfirm(null);
+    } catch(e) { alert("탈퇴 실패: " + e.message); }
+    setWorking(false);
+  };
+
+  // 가족 해체 (전체 삭제)
+  const handleDelete = async () => {
+    setWorking(true);
+    try {
+      const fid = profile.family_id;
+      // 1) 거래 삭제
+      await sb.delete("transactions", { family_id: fid }, token);
+      // 2) 정기지출 삭제
+      await sb.delete("recurring_transactions", { family_id: fid }, token);
+      // 3) 예산 삭제
+      await sb.delete("budgets", { family_id: fid }, token);
+      // 4) 카테고리 삭제
+      await sb.delete("categories", { family_id: fid }, token);
+      // 5) 프로필 family_id null
+      await sb.update("profiles", { family_id: null }, { family_id: fid }, token);
+      // 6) 가족 삭제
+      await sb.delete("families", { id: fid }, token);
+
+      setProfile(p => ({ ...p, family_id: null }));
+      setTransactions([]);
+      setRecurring([]);
+      setConfirm(null);
+    } catch(e) { alert("해체 실패: " + e.message); }
+    setWorking(false);
+  };
+
   return (
-    <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, padding:"16px", marginBottom:16 }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:38, height:38, borderRadius:12, background:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>👨‍👩‍👧</div>
-          <div>
-            <p style={{ color:C.text, fontSize:14, fontWeight:700, margin:0 }}>{family?.name || "우리 가족"}</p>
-            <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>{profile?.name||""} · {profile?.role==="owner"?"가족장":"멤버"}</p>
+    <>
+      <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, padding:"16px", marginBottom:16 }}>
+        {/* 헤더 */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ width:38, height:38, borderRadius:12, background:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>👨‍👩‍👧</div>
+            <div>
+              <p style={{ color:C.text, fontSize:14, fontWeight:700, margin:0 }}>{family?.name || "우리 가족"}</p>
+              <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>{profile?.name||""} · {profile?.role==="owner"?"가족장":"멤버"}</p>
+            </div>
           </div>
+          <button onClick={handleSignOut}
+            style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>
+            로그아웃
+          </button>
         </div>
-        <button onClick={handleSignOut}
-          style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>
-          로그아웃
-        </button>
+
+        {/* 초대코드 */}
+        <div style={{ background:C.surfaceHigh, borderRadius:12, padding:"12px 14px", marginBottom:12 }}>
+          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", fontWeight:600 }}>🔑 가족 초대코드</p>
+          {loading ? (
+            <p style={{ color:C.textMuted, fontSize:13, margin:0 }}>불러오는 중...</p>
+          ) : (
+            <>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ color:C.accent, fontSize:24, fontWeight:800, letterSpacing:6, fontFamily:"'DM Mono',monospace" }}>
+                  {family?.invite_code || "??????"}
+                </span>
+                <button onClick={copyCode}
+                  style={{ padding:"8px 16px", borderRadius:10, border:"none", background:copied?C.income:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", transition:"background 0.2s" }}>
+                  {copied?"✓ 복사됨":"복사"}
+                </button>
+              </div>
+              <p style={{ color:C.textMuted, fontSize:11, margin:0, lineHeight:1.5 }}>
+                이 코드를 가족에게 공유하면 같은 가계부를 함께 쓸 수 있어요
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* 가족 관리 버튼 */}
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={()=>setConfirm("leave")}
+            style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+            가족 탈퇴
+          </button>
+          <button onClick={()=>setConfirm("delete")}
+            style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${C.expense}44`, background:"transparent", color:C.expense, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+            가족 해체
+          </button>
+        </div>
       </div>
-      <div style={{ background:C.surfaceHigh, borderRadius:12, padding:"12px 14px" }}>
-        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", fontWeight:600 }}>🔑 가족 초대코드</p>
-        {loading ? (
-          <p style={{ color:C.textMuted, fontSize:13, margin:0 }}>불러오는 중...</p>
-        ) : (
-          <>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-              <span style={{ color:C.accent, fontSize:24, fontWeight:800, letterSpacing:6, fontFamily:"'DM Mono',monospace" }}>
-                {family?.invite_code || "??????"}
-              </span>
-              <button onClick={copyCode}
-                style={{ padding:"8px 16px", borderRadius:10, border:"none", background:copied?C.income:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", transition:"background 0.2s" }}>
-                {copied?"✓ 복사됨":"복사"}
+
+      {/* 확인 모달 */}
+      {confirm && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 24px" }}>
+          <div style={{ background:C.surface, borderRadius:20, padding:"24px", width:"100%", maxWidth:380, border:`1px solid ${C.border}` }}>
+            <div style={{ textAlign:"center", marginBottom:20 }}>
+              <div style={{ fontSize:44, marginBottom:12 }}>{confirm==="leave"?"🚪":"💥"}</div>
+              <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:"0 0 8px" }}>
+                {confirm==="leave" ? "가족에서 탈퇴할까요?" : "가족을 해체할까요?"}
+              </p>
+              <p style={{ color:C.textMuted, fontSize:13, margin:0, lineHeight:1.6 }}>
+                {confirm==="leave"
+                  ? "나만 가족에서 나가요.\n다른 가족의 데이터는 유지됩니다."
+                  : "⚠️ 모든 거래내역, 정기지출, 예산이\n영구적으로 삭제됩니다. 되돌릴 수 없어요."}
+              </p>
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={()=>setConfirm(null)} disabled={working}
+                style={{ flex:1, padding:"13px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer", fontWeight:600 }}>
+                취소
+              </button>
+              <button onClick={confirm==="leave" ? handleLeave : handleDelete} disabled={working}
+                style={{ flex:1, padding:"13px", borderRadius:12, border:"none", background:C.expense, color:"#fff", fontSize:14, cursor:"pointer", fontWeight:700 }}>
+                {working ? "처리 중..." : confirm==="leave" ? "탈퇴" : "해체"}
               </button>
             </div>
-            <p style={{ color:C.textMuted, fontSize:11, margin:0, lineHeight:1.5 }}>
-              이 코드를 가족에게 공유하면 같은 가계부를 함께 쓸 수 있어요
-            </p>
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -3130,7 +3215,7 @@ export default function App() {
   const ctx = {
     transactions, setTransactions, recurring, setRecurring,
     addTransactions, activeTab, setActiveTab,
-    budgets, setBudgets, token, profile, authUser, handleSignOut,
+    budgets, setBudgets, token, profile, setProfile, authUser, handleSignOut,
   };
 
   return (
