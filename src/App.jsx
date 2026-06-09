@@ -1968,682 +1968,63 @@ const COLOR_OPTIONS = ["#4B78C0","#E05C2A","#2DA870","#9B59B6","#E67E22","#E74C3
 
 // ── 가족 정보 카드 (설정 화면용) ─────────────────────────────
 function FamilyInfoCard() {
-  const { profile, token, handleSignOut } = useApp();
+  const { token, profile, handleSignOut } = useApp();
   const [family,  setFamily]  = useState(null);
   const [copied,  setCopied]  = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!profile?.family_id || !token) return;
+    if (!profile?.family_id || !token) { setLoading(false); return; }
     sb.select("families", `id=eq.${profile.family_id}`, token)
-      .then(data => { if (data?.length) setFamily(data[0]); });
-  }, [profile, token]);
+      .then(data => { if (data?.length) setFamily(data[0]); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [profile?.family_id, token]);
 
   const copyCode = () => {
     if (!family?.invite_code) return;
-    navigator.clipboard?.writeText(family.invite_code).then(()=>{
-      setCopied(true);
-      setTimeout(()=>setCopied(false), 2000);
-    }).catch(()=>{
-      // clipboard API 없을 때 fallback
-      setCopied(true);
-      setTimeout(()=>setCopied(false), 2000);
-    });
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(family.invite_code);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, padding:"16px" }}>
-      {/* 가족명 + 내 이름 */}
+    <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, padding:"16px", marginBottom:16 }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:38, height:38, borderRadius:12, background:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>
-            👨‍👩‍👧
-          </div>
+          <div style={{ width:38, height:38, borderRadius:12, background:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>👨‍👩‍👧</div>
           <div>
-            <p style={{ color:C.text, fontSize:14, fontWeight:700, margin:0 }}>
-              {family?.name || "우리 가족"}
-            </p>
-            <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>
-              {profile?.name || ""} · {profile?.role === "owner" ? "가족장" : "멤버"}
-            </p>
+            <p style={{ color:C.text, fontSize:14, fontWeight:700, margin:0 }}>{family?.name || "우리 가족"}</p>
+            <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>{profile?.name||""} · {profile?.role==="owner"?"가족장":"멤버"}</p>
           </div>
         </div>
-        {/* 로그아웃 */}
         <button onClick={handleSignOut}
           style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>
           로그아웃
         </button>
       </div>
-
-      {/* 초대코드 */}
       <div style={{ background:C.surfaceHigh, borderRadius:12, padding:"12px 14px" }}>
-        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", fontWeight:600 }}>
-          🔑 가족 초대코드
-        </p>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ color:C.accent, fontSize:24, fontWeight:800, letterSpacing:6, fontFamily:"'DM Mono',monospace" }}>
-            {family?.invite_code || "------"}
-          </span>
-          <button onClick={copyCode}
-            style={{ padding:"8px 16px", borderRadius:10, border:"none", background:copied?C.income:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", transition:"background 0.2s" }}>
-            {copied ? "✓ 복사됨" : "복사"}
-          </button>
-        </div>
-        <p style={{ color:C.textMuted, fontSize:11, margin:"8px 0 0", lineHeight:1.5 }}>
-          이 코드를 가족에게 공유하면 같은 가계부를 함께 쓸 수 있어요
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function SettingsScreen() {
-  const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets } = useApp();
-  const [settingTab, setSettingTab] = useState("categories");
-  const [categories, setCategories] = useState(INIT_CATEGORIES);
-
-  // 카테고리 관리 state
-  const [catType,       setCatType]       = useState("expense");
-  const [editingCat,    setEditingCat]    = useState(null);
-  const [editForm,      setEditForm]      = useState({ name:"", icon:"📦", color:"#9CA3AF" });
-  const [addingTo,      setAddingTo]      = useState(null);
-  const [newCatForm,    setNewCatForm]    = useState({ name:"", icon:"📦", color:"#9CA3AF" });
-  // 삭제 관련 — 이전할 카테고리 선택
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // {groupId, catId, name, oldName}
-  const [migrateTo,     setMigrateTo]     = useState("기타"); // 이전 대상 카테고리명
-
-  // 수정 저장 — 이름 변경 시 기존 거래도 자동 반영
-  const saveCatEdit = () => {
-    const oldName = deleteConfirm?.oldName; // 혹시 모를 충돌 방지
-    // 현재 편집 중인 카테고리의 원래 이름 찾기
-    let origName = "";
-    categories[catType].forEach(g => {
-      if (g.id === editingCat?.groupId) {
-        const found = g.children.find(c => c.id === editingCat?.catId);
-        if (found) origName = found.name;
-      }
-    });
-
-    // 1) categories state 업데이트
-    setCategories(prev => {
-      const groups = prev[catType].map(g => {
-        if (g.id !== editingCat.groupId) return g;
-        return { ...g, children: g.children.map(c =>
-          c.id === editingCat.catId ? { ...c, ...editForm } : c
-        )};
-      });
-      return { ...prev, [catType]: groups };
-    });
-
-    // 2) 이름이 바뀐 경우 → 기존 거래 category 자동 반영
-    if (origName && origName !== editForm.name) {
-      setTransactions(prev => prev.map(tx => {
-        if (tx.is_group) {
-          return {
-            ...tx,
-            category: tx.category === origName ? editForm.name : tx.category,
-            children: tx.children.map(c => c.category === origName ? { ...c, category: editForm.name } : c),
-          };
-        }
-        return tx.category === origName ? { ...tx, category: editForm.name } : tx;
-      }));
-    }
-
-    setEditingCat(null);
-  };
-
-  // 삭제 — 이전 카테고리 선택 후 일괄 변경
-  const execDelete = () => {
-    const { groupId, catId, oldName } = deleteConfirm;
-
-    // 1) 기존 거래 일괄 이전
-    setTransactions(prev => prev.map(tx => {
-      if (tx.is_group) {
-        return {
-          ...tx,
-          category: tx.category === oldName ? migrateTo : tx.category,
-          children: tx.children.map(c => c.category === oldName ? { ...c, category: migrateTo } : c),
-        };
-      }
-      return tx.category === oldName ? { ...tx, category: migrateTo } : tx;
-    }));
-
-    // 2) 카테고리 목록에서 제거
-    setCategories(prev => {
-      const groups = prev[catType].map(g => {
-        if (g.id !== groupId) return g;
-        return { ...g, children: g.children.filter(c => c.id !== catId) };
-      });
-      return { ...prev, [catType]: groups };
-    });
-
-    // 해당 카테고리 사용 거래 수 계산 (알림용)
-    const affectedCount = transactions.flatMap(t => t.is_group ? t.children : [t])
-      .filter(t => t.category === oldName).length;
-
-    setDeleteConfirm(null);
-    setEditingCat(null);
-    setMigrateTo("기타");
-  };
-
-  // 카테고리 추가
-  const addCat = (groupId) => {
-    if (!newCatForm.name.trim()) return;
-    setCategories(prev => {
-      const groups = prev[catType].map(g => {
-        if (g.id !== groupId) return g;
-        return { ...g, children: [...g.children, { id:"c"+Date.now(), ...newCatForm }] };
-      });
-      return { ...prev, [catType]: groups };
-    });
-    setAddingTo(null);
-    setNewCatForm({ name:"", icon:"📦", color:"#9CA3AF" });
-  };
-
-  // 이전 가능한 카테고리 목록 (삭제 대상 제외)
-  const getMigrateOptions = () => {
-    const allCats = categories[catType].flatMap(g => g.children);
-    return allCats.filter(c => c.id !== deleteConfirm?.catId).map(c => c.name);
-  };
-
-  // 삭제 대상 카테고리 사용 거래 수
-  const getAffectedCount = (catName) =>
-    transactions.flatMap(t => t.is_group ? t.children : [t]).filter(t => t.category === catName).length;
-
-  // ── 정기지출 관련 (RecurringScreen에서 이동) ──────────────────
-  const now2 = new Date();
-  const monthLabel = `${now2.getFullYear()}년 ${now2.getMonth()+1}월`;
-  const [showAdd,      setShowAdd]      = useState(false);
-  const [confirmItem,  setConfirmItem]  = useState(null);
-  const [confirmAmt,   setConfirmAmt]   = useState("");
-  const [expandedId,   setExpandedId]   = useState(null);
-  const [recEditForm,  setRecEditForm]  = useState({});
-  const ICONS_REC = ["📺","▶️","📱","🏠","⚡","💪","🛡️","🚗","📚","🎮","☕","🐶"];
-  const pendingItems  = recurring.filter(i=>i.is_active && i.status==="need_input");
-  const activeItems   = recurring.filter(i=>i.is_active && i.status!=="need_input");
-  const inactiveItems = recurring.filter(i=>!i.is_active);
-  const totalFixed    = recurring.filter(i=>i.is_active && i.amount_type==="fixed").reduce((s,i)=>s+(i.amount||0),0);
-  const startRecEdit  = (item) => {
-    if (expandedId===item.id) { setExpandedId(null); return; }
-    setExpandedId(item.id);
-    setRecEditForm({ name:item.name, amount:item.amount||item.last_amount||"", day_of_month:item.day_of_month, amount_type:item.amount_type, icon:item.icon });
-  };
-  const saveRecEdit = (id) => {
-    setRecurring(prev=>prev.map(i=>i.id!==id?i:{ ...i, name:recEditForm.name, day_of_month:Number(recEditForm.day_of_month), amount_type:recEditForm.amount_type, icon:recEditForm.icon,
-      amount:recEditForm.amount_type==="fixed"?Number(recEditForm.amount):null, last_amount:recEditForm.amount_type==="variable"?Number(recEditForm.amount):i.last_amount }));
-    setExpandedId(null);
-  };
-  const toggleActive = (id) => setRecurring(prev=>prev.map(i=>i.id!==id?i:{...i,is_active:!i.is_active,status:i.is_active?"inactive":i.amount_type==="variable"?"need_input":"pending_date"}));
-  const submitConfirm = () => {
-    const amount = Number(confirmAmt);
-    addTransactions([{ id:uid(), type:"expense", amount, memo:confirmItem.name, date:today(), category:confirmItem.category, is_group:false, from_recurring:true }]);
-    setRecurring(prev=>prev.map(i=>i.id===confirmItem.id?{...i,status:"registered",last_amount:amount}:i));
-    setConfirmItem(null); setConfirmAmt("");
-  };
-  const [newRec, setNewRec] = useState({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱" });
-  const addRec = () => {
-    if (!newRec.name) return;
-    setRecurring(prev=>[...prev,{ id:"r"+Date.now(), ...newRec, amount:newRec.amount_type==="fixed"?Number(newRec.amount):null,
-      day_of_month:Number(newRec.day_of_month), is_active:true, auto_register:newRec.amount_type==="fixed",
-      status:newRec.amount_type==="variable"?"need_input":"pending_date", last_amount:newRec.amount_type==="variable"?Number(newRec.amount):undefined }]);
-    setShowAdd(false); setNewRec({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱" });
-  };
-  const StatusBadge = ({ status }) => {
-    const map = { registered:{label:"등록완료",color:C.income}, pending_date:{label:"자동예정",color:C.accent}, need_input:{label:"금액확인필요",color:C.expense}, inactive:{label:"비활성",color:C.textMuted} };
-    const s = map[status]||map.inactive;
-    return <Tag color={s.color}>{s.label}</Tag>;
-  };
-  const RecRow = ({ item }) => {
-    const isExp = expandedId===item.id;
-    return (
-      <div style={{ borderBottom:`1px solid ${C.border}` }}>
-        <div onClick={()=>startRecEdit(item)} style={{ padding:"14px 16px", display:"flex", alignItems:"center", gap:12, opacity:item.is_active?1:0.5, cursor:"pointer", background:isExp?C.accentSoft:"transparent" }}>
-          <div style={{ width:38, height:38, borderRadius:10, background:C.surfaceHigh, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{item.icon}</div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-              <span style={{ color:C.text, fontSize:14, fontWeight:500 }}>{item.name}</span>
-              <StatusBadge status={item.status} />
+        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", fontWeight:600 }}>🔑 가족 초대코드</p>
+        {loading ? (
+          <p style={{ color:C.textMuted, fontSize:13, margin:0 }}>불러오는 중...</p>
+        ) : (
+          <>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+              <span style={{ color:C.accent, fontSize:24, fontWeight:800, letterSpacing:6, fontFamily:"'DM Mono',monospace" }}>
+                {family?.invite_code || "??????"}
+              </span>
+              <button onClick={copyCode}
+                style={{ padding:"8px 16px", borderRadius:10, border:"none", background:copied?C.income:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", transition:"background 0.2s" }}>
+                {copied?"✓ 복사됨":"복사"}
+              </button>
             </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <span style={{ color:C.textMuted, fontSize:11 }}>매달 {item.day_of_month}일</span>
-              {item.amount_type==="variable" && <span style={{ color:C.textMuted, fontSize:11 }}>· 지난달 {fmt(item.last_amount||0)}원</span>}
-            </div>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            {item.amount_type==="fixed" ? <span style={{ color:C.expense, fontSize:14, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>-{fmt(item.amount)}원</span> : <span style={{ color:C.textMuted, fontSize:13 }}>변동</span>}
-            <span style={{ color:C.textMuted, fontSize:16, transition:"transform 0.2s", display:"inline-block", transform:isExp?"rotate(90deg)":"rotate(0deg)" }}>›</span>
-          </div>
-        </div>
-        {isExp && (
-          <div style={{ background:C.surfaceHigh, padding:"14px 16px 16px", borderTop:`1px solid ${C.border}` }}>
-            <p style={{ color:C.accent, fontSize:11, fontWeight:600, margin:"0 0 12px" }}>✏️ {monthLabel} 반영 기준으로 수정</p>
-            <div style={{ marginBottom:10 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px" }}>아이콘</p>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {ICONS_REC.map(ic=><button key={ic} onClick={()=>setRecEditForm(f=>({...f,icon:ic}))} style={{ width:34, height:34, borderRadius:8, border:`1px solid ${recEditForm.icon===ic?C.accent:C.border}`, background:recEditForm.icon===ic?C.accentSoft:C.surface, fontSize:16, cursor:"pointer" }}>{ic}</button>)}
-              </div>
-            </div>
-            <div style={{ marginBottom:10 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>항목명</p>
-              <input value={recEditForm.name} onChange={e=>setRecEditForm(f=>({...f,name:e.target.value}))} style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
-            </div>
-            <div style={{ marginBottom:10 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>금액 유형</p>
-              <div style={{ display:"flex", gap:6 }}>
-                {[{v:"fixed",label:"고정"},{v:"variable",label:"변동"}].map(o=>(
-                  <button key={o.v} onClick={()=>setRecEditForm(f=>({...f,amount_type:o.v}))} style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${recEditForm.amount_type===o.v?C.accent:C.border}`, background:recEditForm.amount_type===o.v?C.accentSoft:"transparent", color:recEditForm.amount_type===o.v?C.accent:C.textMuted, fontSize:12, cursor:"pointer" }}>{o.label}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8, marginBottom:14 }}>
-              <div>
-                <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>{recEditForm.amount_type==="fixed"?"금액":"지난달 금액"}</p>
-                <input type="number" value={recEditForm.amount} onChange={e=>setRecEditForm(f=>({...f,amount:e.target.value}))} placeholder="0" style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box", fontFamily:"'DM Mono',monospace" }} />
-              </div>
-              <div>
-                <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>결제일</p>
-                <div style={{ display:"flex", alignItems:"center", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px" }}>
-                  <input type="number" min="1" max="31" value={recEditForm.day_of_month} onChange={e=>setRecEditForm(f=>({...f,day_of_month:e.target.value}))} style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace" }} />
-                  <span style={{ color:C.textMuted, fontSize:12 }}>일</span>
-                </div>
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={e=>{e.stopPropagation();toggleActive(item.id);setExpandedId(null);}} style={{ padding:"9px 14px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>{item.is_active?"비활성화":"활성화"}</button>
-              <button onClick={e=>{e.stopPropagation();setExpandedId(null);}} style={{ flex:1, padding:"9px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
-              <button onClick={e=>{e.stopPropagation();saveRecEdit(item.id);}} style={{ flex:2, padding:"9px", borderRadius:9, border:"none", background:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>저장</button>
-            </div>
-          </div>
+            <p style={{ color:C.textMuted, fontSize:11, margin:0, lineHeight:1.5 }}>
+              이 코드를 가족에게 공유하면 같은 가계부를 함께 쓸 수 있어요
+            </p>
+          </>
         )}
       </div>
-    );
-  };
-
-  return (
-    <div style={{ paddingBottom:80 }}>
-      {/* 헤더 */}
-      <div style={{ padding:"28px 20px 0" }}>
-        <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}>관리</p>
-        <h2 style={{ color:C.text, fontSize:20, margin:"4px 0 16px", fontWeight:700 }}>설정</h2>
-
-        {/* 가족 정보 카드 */}
-        <FamilyInfoCard />
-
-        {/* 설정 내 탭 */}
-        <div style={{ display:"flex", background:C.surfaceHigh, borderRadius:12, padding:4, gap:4, marginTop:16 }}>
-          {[{v:"categories",label:"카테고리",icon:"🏷️"},{v:"recurring",label:"정기지출",icon:"🔄"},{v:"budget",label:"예산",icon:"💰"}].map(t=>(
-            <button key={t.v} onClick={()=>setSettingTab(t.v)}
-              style={{ flex:1, padding:"10px 6px", borderRadius:9, border:"none", background:settingTab===t.v?C.accent:"transparent",
-                color:settingTab===t.v?"#fff":C.textMuted, fontSize:11, fontWeight:settingTab===t.v?700:400, cursor:"pointer", transition:"all 0.2s", display:"flex", alignItems:"center", justifyContent:"center", gap:4 }}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── 카테고리 관리 ── */}
-      {settingTab==="categories" && (
-        <div style={{ padding:"16px 16px 0" }}>
-          {/* 지출/수입 타입 전환 */}
-          <div style={{ display:"flex", gap:8, marginBottom:16 }}>
-            {[{v:"expense",label:"💸 지출"},{v:"income",label:"💰 수입"}].map(t=>(
-              <button key={t.v} onClick={()=>{ setCatType(t.v); setEditingCat(null); setAddingTo(null); }}
-                style={{ padding:"7px 18px", borderRadius:20, border:`1px solid ${catType===t.v?C.accent:C.border}`, background:catType===t.v?C.accentSoft:"transparent", color:catType===t.v?C.accent:C.textMuted, fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {/* 카테고리 그룹 목록 */}
-          {categories[catType].map(group=>(
-            <div key={group.id} style={{ marginBottom:16 }}>
-              {/* 그룹 헤더 */}
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, padding:"0 4px" }}>
-                <span style={{ fontSize:16 }}>{group.icon}</span>
-                <span style={{ color:group.color, fontSize:13, fontWeight:700 }}>{group.name}</span>
-                <span style={{ color:C.textMuted, fontSize:11 }}>{group.children.length}개</span>
-              </div>
-
-              {/* 카테고리 칩 목록 */}
-              <div style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, overflow:"hidden" }}>
-                {group.children.map((cat,ci)=>{
-                  const isEditing = editingCat?.catId===cat.id;
-                  return (
-                    <div key={cat.id}>
-                      {/* 카테고리 행 */}
-                      <div onClick={()=>{ if(isEditing){setEditingCat(null);}else{setEditingCat({groupId:group.id,catId:cat.id});setEditForm({name:cat.name,icon:cat.icon,color:cat.color});setAddingTo(null);}}}
-                        style={{ display:"flex", alignItems:"center", padding:"13px 16px", borderBottom:`1px solid ${C.border}`, cursor:"pointer", background:isEditing?C.accentSoft:"transparent" }}>
-                        {/* 아이콘 배지 */}
-                        <div style={{ width:34, height:34, borderRadius:9, background:cat.color+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, marginRight:12, flexShrink:0 }}>
-                          {cat.icon}
-                        </div>
-                        <span style={{ flex:1, color:C.text, fontSize:14, fontWeight:500 }}>{cat.name}</span>
-                        <span style={{ color:isEditing?C.accent:C.textMuted, fontSize:11, border:`1px solid ${isEditing?C.accent:C.border}`, borderRadius:6, padding:"2px 8px", background:isEditing?C.accentSoft:"transparent" }}>
-                          {isEditing?"닫기":"수정"}
-                        </span>
-                      </div>
-
-                      {/* 인라인 수정 패널 */}
-                      {isEditing && (
-                        <div style={{ background:C.surfaceHigh, padding:"14px 16px 16px", borderBottom:`1px solid ${C.border}` }}>
-                          {/* 아이콘 선택 */}
-                          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px" }}>아이콘</p>
-                          <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:12 }}>
-                            {ICON_OPTIONS.map(ic=>(
-                              <button key={ic} onClick={()=>setEditForm(f=>({...f,icon:ic}))}
-                                style={{ width:34, height:34, borderRadius:8, border:`1px solid ${editForm.icon===ic?C.accent:C.border}`, background:editForm.icon===ic?C.accentSoft:C.surface, fontSize:16, cursor:"pointer" }}>{ic}</button>
-                            ))}
-                          </div>
-                          {/* 이름 */}
-                          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>이름</p>
-                          <input value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))}
-                            style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box", marginBottom:12 }} />
-                          {/* 색상 */}
-                          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px" }}>색상</p>
-                          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
-                            {COLOR_OPTIONS.map(col=>(
-                              <button key={col} onClick={()=>setEditForm(f=>({...f,color:col}))}
-                                style={{ width:28, height:28, borderRadius:"50%", background:col, border:`3px solid ${editForm.color===col?"#1A1D27":"transparent"}`, cursor:"pointer" }} />
-                            ))}
-                          </div>
-                          {/* 버튼 */}
-                          <div style={{ display:"flex", gap:8 }}>
-                            <button onClick={()=>{ setDeleteConfirm({groupId:group.id,catId:cat.id,name:cat.name,oldName:cat.name}); setMigrateTo("기타"); }}
-                              style={{ padding:"8px 12px", borderRadius:8, border:`1px solid ${C.expense}44`, background:"transparent", color:C.expense, fontSize:11, cursor:"pointer" }}>삭제</button>
-                            <button onClick={()=>setEditingCat(null)} style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
-                            <button onClick={saveCatEdit} style={{ flex:2, padding:"8px", borderRadius:8, border:"none", background:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>저장</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* 새 카테고리 추가 인라인 */}
-                {addingTo===group.id ? (
-                  <div style={{ padding:"14px 16px" }}>
-                    <p style={{ color:C.accent, fontSize:11, fontWeight:600, margin:"0 0 10px" }}>+ 새 카테고리</p>
-                    <div style={{ display:"flex", flexWrap:"wrap", gap:5, marginBottom:10 }}>
-                      {ICON_OPTIONS.map(ic=>(
-                        <button key={ic} onClick={()=>setNewCatForm(f=>({...f,icon:ic}))}
-                          style={{ width:32, height:32, borderRadius:7, border:`1px solid ${newCatForm.icon===ic?C.accent:C.border}`, background:newCatForm.icon===ic?C.accentSoft:C.surface, fontSize:15, cursor:"pointer" }}>{ic}</button>
-                      ))}
-                    </div>
-                    <input value={newCatForm.name} onChange={e=>setNewCatForm(f=>({...f,name:e.target.value}))} placeholder="카테고리 이름"
-                      style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box", marginBottom:10 }} />
-                    <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
-                      {COLOR_OPTIONS.map(col=>(
-                        <button key={col} onClick={()=>setNewCatForm(f=>({...f,color:col}))}
-                          style={{ width:26, height:26, borderRadius:"50%", background:col, border:`3px solid ${newCatForm.color===col?"#1A1D27":"transparent"}`, cursor:"pointer" }} />
-                      ))}
-                    </div>
-                    <div style={{ display:"flex", gap:8 }}>
-                      <button onClick={()=>setAddingTo(null)} style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
-                      <button onClick={()=>addCat(group.id)} disabled={!newCatForm.name.trim()}
-                        style={{ flex:2, padding:"8px", borderRadius:8, border:"none", background:newCatForm.name.trim()?C.accent:C.border, color:"#fff", fontSize:13, fontWeight:700, cursor:newCatForm.name.trim()?"pointer":"default" }}>추가</button>
-                    </div>
-                  </div>
-                ) : (
-                  <button onClick={()=>{ setAddingTo(group.id); setEditingCat(null); setNewCatForm({ name:"", icon:"📦", color:group.color }); }}
-                    style={{ width:"100%", padding:"12px", border:"none", background:"transparent", color:C.accent, fontSize:13, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-                    ＋ {group.name}에 카테고리 추가
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── 정기 지출 ── */}
-      {settingTab==="recurring" && (
-        <div style={{ padding:"16px 16px 0" }}>
-          {/* 요약 카드 */}
-          <div style={{ background:"linear-gradient(135deg,#EEF2FF,#E8EDFF)", borderRadius:16, padding:"18px", border:`1px solid ${C.border}`, marginBottom:16 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-              <div>
-                <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px", letterSpacing:1, textTransform:"uppercase" }}>이달 고정 합계</p>
-                <p style={{ color:C.accent, fontSize:11, margin:"0 0 8px" }}>{monthLabel} 기준</p>
-                <p style={{ color:C.expense, fontSize:26, fontWeight:800, margin:0, fontFamily:"'DM Mono',monospace" }}>-{fmt(totalFixed)}<span style={{ fontSize:14, fontWeight:400, color:C.textMuted, marginLeft:4 }}>원</span></p>
-              </div>
-              <button onClick={()=>setShowAdd(true)} style={{ padding:"8px 14px", borderRadius:10, border:"none", background:C.accentSoft, color:C.accent, fontSize:13, fontWeight:600, cursor:"pointer" }}>+ 추가</button>
-            </div>
-          </div>
-
-          {/* 확인 필요 */}
-          {pendingItems.length>0 && (
-            <div style={{ background:C.expense+"11", borderRadius:14, padding:"14px 16px", border:`1px solid ${C.expense}33`, marginBottom:16 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
-                <span style={{ fontSize:15 }}>⚠️</span>
-                <span style={{ color:C.expense, fontSize:13, fontWeight:600 }}>{monthLabel} 금액 확인 필요</span>
-              </div>
-              {pendingItems.map(item=>(
-                <div key={item.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 0", borderTop:`1px solid ${C.expense}22` }}>
-                  <div><span style={{ color:C.text, fontSize:13 }}>{item.icon} {item.name}</span><span style={{ color:C.textMuted, fontSize:11, marginLeft:8 }}>지난달 {fmt(item.last_amount||0)}원</span></div>
-                  <button onClick={()=>{ setConfirmItem(item); setConfirmAmt(String(item.last_amount||"")); }} style={{ padding:"6px 14px", borderRadius:8, border:"none", background:C.expense, color:"#fff", fontSize:12, fontWeight:600, cursor:"pointer" }}>금액 입력</button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* 활성 */}
-          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", textTransform:"uppercase", letterSpacing:0.8 }}>활성 항목 · 클릭하여 수정</p>
-          <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, overflow:"hidden", marginBottom:16 }}>
-            {activeItems.map(item=><RecRow key={item.id} item={item} />)}
-          </div>
-
-          {inactiveItems.length>0 && (
-            <>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", textTransform:"uppercase", letterSpacing:0.8 }}>비활성 항목</p>
-              <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, overflow:"hidden" }}>
-                {inactiveItems.map(item=><RecRow key={item.id} item={item} />)}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ── 예산 설정 ── */}
-      {settingTab==="budget" && (
-        <div style={{ padding:"16px 16px 0" }}>
-          {/* 안내 */}
-          <div style={{ background:C.accentSoft, borderRadius:12, padding:"12px 14px", marginBottom:16, display:"flex", gap:10, alignItems:"flex-start" }}>
-            <span style={{ fontSize:18 }}>💡</span>
-            <p style={{ color:C.accent, fontSize:12, margin:0, lineHeight:1.6 }}>
-              예산을 설정하면 홈 화면과 통계에서 달성률을 확인할 수 있어요. 전체 예산과 카테고리별 예산을 각각 설정할 수 있습니다.
-            </p>
-          </div>
-
-          {/* 전체 예산 */}
-          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", textTransform:"uppercase", letterSpacing:0.8, fontWeight:600 }}>전체 예산</p>
-          <div style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, padding:"16px", marginBottom:20 }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:18 }}>🏦</span>
-                <div>
-                  <p style={{ color:C.text, fontSize:14, fontWeight:600, margin:0 }}>이달 총 지출 한도</p>
-                  <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>초과 시 홈에서 경고 표시</p>
-                </div>
-              </div>
-              <label style={{ position:"relative", display:"inline-block", width:44, height:24, flexShrink:0 }}>
-                <input type="checkbox" checked={budgets.totalEnabled}
-                  onChange={e=>setBudgets(b=>({...b,totalEnabled:e.target.checked}))}
-                  style={{ opacity:0, width:0, height:0 }} />
-                <span style={{ position:"absolute", cursor:"pointer", inset:0, background:budgets.totalEnabled?C.accent:C.border, borderRadius:24, transition:"0.2s" }}>
-                  <span style={{ position:"absolute", content:"", height:18, width:18, left: budgets.totalEnabled?22:3, bottom:3, background:"#fff", borderRadius:"50%", transition:"0.2s" }} />
-                </span>
-              </label>
-            </div>
-            {budgets.totalEnabled && (
-              <div style={{ display:"flex", alignItems:"center", background:C.surfaceHigh, borderRadius:10, border:`1px solid ${C.border}`, overflow:"hidden" }}>
-                <input type="number" value={budgets.total||""}
-                  onChange={e=>setBudgets(b=>({...b,total:Number(e.target.value)}))}
-                  placeholder="예) 1500000"
-                  style={{ flex:1, background:"transparent", border:"none", outline:"none", color:C.text, fontSize:17, padding:"13px 16px", fontFamily:"'DM Mono',monospace" }} />
-                <span style={{ color:C.textMuted, fontSize:13, paddingRight:16 }}>원</span>
-              </div>
-            )}
-          </div>
-
-          {/* 카테고리별 예산 */}
-          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", textTransform:"uppercase", letterSpacing:0.8, fontWeight:600 }}>카테고리별 예산</p>
-          <div style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, overflow:"hidden", marginBottom:20 }}>
-            {[...INIT_CATEGORIES.expense, ...INIT_CATEGORIES.income].flatMap(g=>g.children).map((cat,i,arr)=>{
-              const val = budgets.categories[cat.name]||"";
-              return (
-                <div key={cat.id} style={{ display:"flex", alignItems:"center", padding:"13px 16px", borderBottom: i<arr.length-1?`1px solid ${C.border}`:"none", gap:12 }}>
-                  <div style={{ width:34, height:34, borderRadius:9, background:cat.color+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0 }}>
-                    {cat.icon}
-                  </div>
-                  <span style={{ flex:1, color:C.text, fontSize:13, fontWeight:500 }}>{cat.name}</span>
-                  <div style={{ display:"flex", alignItems:"center", background:val?C.accentSoft:C.surfaceHigh, borderRadius:8, border:`1px solid ${val?C.accent:C.border}`, overflow:"hidden", width:120 }}>
-                    <input type="number" value={val}
-                      onChange={e=>setBudgets(b=>({...b,categories:{...b.categories,[cat.name]:Number(e.target.value)||""}}))}
-                      placeholder="미설정"
-                      style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:C.text, fontSize:12, padding:"8px 10px", fontFamily:"'DM Mono',monospace", textAlign:"right" }} />
-                    <span style={{ color:C.textMuted, fontSize:11, paddingRight:8, flexShrink:0 }}>원</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 삭제 + 이전 모달 */}
-      {deleteConfirm && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-          <div style={{ background:C.surface, borderRadius:"20px 20px 0 0", padding:"24px 20px 36px", width:"100%", maxWidth:430, border:`1px solid ${C.border}` }}>
-            {/* 제목 */}
-            <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:"0 0 6px" }}>🗑️ 카테고리 삭제</p>
-            <p style={{ color:C.textMuted, fontSize:13, margin:"0 0 16px" }}>
-              <span style={{ color:C.expense, fontWeight:600 }}>"{deleteConfirm.name}"</span> 카테고리를 삭제합니다
-            </p>
-
-            {/* 영향받는 거래 수 */}
-            {(() => {
-              const count = getAffectedCount(deleteConfirm.oldName);
-              return count > 0 ? (
-                <div style={{ background:C.expense+"11", borderRadius:10, padding:"10px 14px", marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:16 }}>⚠️</span>
-                  <p style={{ color:C.expense, fontSize:13, margin:0 }}>
-                    이 카테고리를 사용 중인 거래 <span style={{ fontWeight:700 }}>{count}건</span>이 있어요
-                  </p>
-                </div>
-              ) : (
-                <div style={{ background:C.income+"11", borderRadius:10, padding:"10px 14px", marginBottom:16, display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:16 }}>✅</span>
-                  <p style={{ color:C.income, fontSize:13, margin:0 }}>이 카테고리를 사용 중인 거래가 없어요</p>
-                </div>
-              );
-            })()}
-
-            {/* 이전 대상 선택 */}
-            {getAffectedCount(deleteConfirm.oldName) > 0 && (
-              <div style={{ marginBottom:16 }}>
-                <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 8px", fontWeight:600 }}>
-                  기존 거래를 어디로 이전할까요?
-                </p>
-                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                  {getMigrateOptions().map(name => {
-                    const allCats = categories[catType].flatMap(g=>g.children);
-                    const cat = allCats.find(c=>c.name===name)||{icon:"📦",color:C.textMuted};
-                    return (
-                      <button key={name} onClick={()=>setMigrateTo(name)}
-                        style={{ padding:"6px 12px", borderRadius:20, border:`1px solid ${migrateTo===name?cat.color||C.accent:C.border}`,
-                          background:migrateTo===name?(cat.color||C.accent)+"22":"transparent",
-                          color:migrateTo===name?cat.color||C.accent:C.textMuted,
-                          fontSize:12, fontWeight:migrateTo===name?700:400, cursor:"pointer" }}>
-                        {cat.icon} {name}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* 선택된 이전 대상 요약 */}
-                <div style={{ marginTop:10, padding:"8px 12px", background:C.surfaceHigh, borderRadius:8 }}>
-                  <span style={{ color:C.textMuted, fontSize:12 }}>
-                    거래 {getAffectedCount(deleteConfirm.oldName)}건 →{" "}
-                    <span style={{ color:C.text, fontWeight:600 }}>"{migrateTo}"</span>
-                    으로 이전됩니다
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* 버튼 */}
-            <div style={{ display:"flex", gap:10 }}>
-              <button onClick={()=>{ setDeleteConfirm(null); setMigrateTo("기타"); }}
-                style={{ flex:1, padding:"14px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer", fontWeight:600 }}>
-                취소
-              </button>
-              <button onClick={execDelete}
-                style={{ flex:1, padding:"14px", borderRadius:12, border:"none", background:C.expense, color:"#fff", fontSize:14, cursor:"pointer", fontWeight:700 }}>
-                삭제
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 변동금액 확정 모달 */}
-      {confirmItem && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-          <div style={{ background:C.surface, borderRadius:"20px 20px 0 0", padding:"24px 20px 40px", width:"100%", maxWidth:430, border:`1px solid ${C.border}` }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
-              <span style={{ fontSize:24 }}>{confirmItem.icon}</span>
-              <div>
-                <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0 }}>{confirmItem.name}</p>
-                <p style={{ color:C.accent, fontSize:12, margin:"2px 0 0" }}>{monthLabel} 금액을 입력해주세요</p>
-              </div>
-            </div>
-            <div style={{ background:C.surfaceHigh, borderRadius:10, padding:"10px 14px", marginBottom:12 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 2px" }}>지난달</p>
-              <p style={{ color:C.textSub, fontSize:14, fontWeight:600, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(confirmItem.last_amount||0)}원</p>
-            </div>
-            <div style={{ display:"flex", alignItems:"center", background:C.surfaceHigh, borderRadius:10, border:`1px solid ${C.border}`, overflow:"hidden", marginBottom:16 }}>
-              <input type="number" value={confirmAmt} onChange={e=>setConfirmAmt(e.target.value)}
-                style={{ flex:1, background:"transparent", border:"none", outline:"none", color:C.text, fontSize:18, padding:"14px 16px", fontFamily:"'DM Mono',monospace" }} />
-              <span style={{ color:C.textMuted, fontSize:14, paddingRight:16 }}>원</span>
-            </div>
-            <div style={{ display:"flex", gap:10 }}>
-              <button onClick={()=>setConfirmItem(null)} style={{ flex:1, padding:"14px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:15, cursor:"pointer" }}>취소</button>
-              <button onClick={submitConfirm} disabled={!confirmAmt} style={{ flex:2, padding:"14px", borderRadius:12, border:"none", background:confirmAmt?C.accent:C.border, color:"#fff", fontSize:15, fontWeight:700, cursor:confirmAmt?"pointer":"default" }}>등록하기</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 정기항목 추가 모달 */}
-      {showAdd && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-          <div style={{ background:C.surface, borderRadius:"20px 20px 0 0", padding:"24px 20px 40px", width:"100%", maxWidth:430, border:`1px solid ${C.border}` }}>
-            <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:"0 0 20px" }}>정기 지출 추가</p>
-            {[{label:"이름",field:"name",type:"text",placeholder:"넷플릭스, 관리비 등"},{label:"매달 결제일",field:"day_of_month",type:"number",placeholder:"1~31"}].map(f=>(
-              <div key={f.field} style={{ marginBottom:12 }}>
-                <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>{f.label}</p>
-                <input type={f.type} value={newRec[f.field]} onChange={e=>setNewRec(n=>({...n,[f.field]:e.target.value}))} placeholder={f.placeholder}
-                  style={{ width:"100%", background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 14px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
-              </div>
-            ))}
-            <div style={{ marginBottom:12 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>금액 유형</p>
-              <div style={{ display:"flex", gap:8 }}>
-                {[{v:"fixed",label:"고정"},{v:"variable",label:"변동"}].map(o=>(
-                  <button key={o.v} onClick={()=>setNewRec(n=>({...n,amount_type:o.v}))} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${newRec.amount_type===o.v?C.accent:C.border}`, background:newRec.amount_type===o.v?C.accentSoft:"transparent", color:newRec.amount_type===o.v?C.accent:C.textMuted, fontSize:12, cursor:"pointer" }}>{o.label}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ marginBottom:20 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>{newRec.amount_type==="fixed"?"금액":"지난달 금액 (참고)"}</p>
-              <input type="number" value={newRec.amount} onChange={e=>setNewRec(n=>({...n,amount:e.target.value}))} placeholder="0"
-                style={{ width:"100%", background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 14px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
-            </div>
-            <div style={{ display:"flex", gap:10 }}>
-              <button onClick={()=>setShowAdd(false)} style={{ flex:1, padding:"14px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:15, cursor:"pointer" }}>취소</button>
-              <button onClick={addRec} style={{ flex:2, padding:"14px", borderRadius:12, border:"none", background:C.accent, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer" }}>추가하기</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -2667,7 +2048,7 @@ function AuthScreen({ onAuth }) {
   const [name,     setName]     = useState("");
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
-  const [verified, setVerified] = useState(false); // 이메일 인증 대기 상태
+  const [verified, setVerified] = useState(false);
 
   const handle = async () => {
     setError(""); setLoading(true);
@@ -2675,16 +2056,10 @@ function AuthScreen({ onAuth }) {
       if (mode === "login") {
         const res = await sb.signIn(email, password);
         if (res.error) {
-          if (res.error.message?.includes("Invalid login credentials") ||
-              res.error.message?.includes("invalid_credentials")) {
+          if (res.error.message?.includes("Invalid login") || res.error.message?.includes("invalid_credentials"))
             throw new Error("이메일 또는 비밀번호가 올바르지 않아요");
-          }
-          if (res.error.message?.includes("Email not confirmed")) {
+          if (res.error.message?.includes("Email not confirmed"))
             throw new Error("이메일 인증이 완료되지 않았어요. 받은 편지함을 확인해주세요");
-          }
-          if (res.error.message?.includes("Too many requests")) {
-            throw new Error("잠시 후 다시 시도해주세요");
-          }
           throw new Error(res.error.message || "로그인 실패");
         }
         localStorage.setItem("sb_token", res.access_token);
@@ -2692,20 +2067,11 @@ function AuthScreen({ onAuth }) {
       } else {
         const res = await sb.signUp(email, password);
         if (res.error) {
-          // 이미 가입된 이메일 처리
-          if (res.error.message?.includes("already registered") ||
-              res.error.message?.includes("already been registered") ||
-              res.error.code === "user_already_exists") {
+          if (res.error.message?.includes("already registered") || res.error.message?.includes("already been registered"))
             throw new Error("이미 가입된 이메일이에요. 로그인을 시도해보세요.");
-          }
           throw new Error(res.error.message || "회원가입 실패");
         }
-        // 이메일 인증 필요한 경우
-        if (!res.access_token) {
-          setVerified(true);
-          setLoading(false);
-          return;
-        }
+        if (!res.access_token) { setVerified(true); setLoading(false); return; }
         localStorage.setItem("sb_token", res.access_token);
         onAuth(res.access_token, res.user);
       }
@@ -2713,7 +2079,6 @@ function AuthScreen({ onAuth }) {
     setLoading(false);
   };
 
-  // 이메일 인증 대기 화면
   if (verified) return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px" }}>
       <div style={{ width:"100%", maxWidth:380, textAlign:"center" }}>
@@ -2722,16 +2087,12 @@ function AuthScreen({ onAuth }) {
         <p style={{ color:C.textMuted, fontSize:14, margin:"0 0 8px", lineHeight:1.6 }}>
           <span style={{ color:C.accent, fontWeight:600 }}>{email}</span> 으로<br/>인증 링크를 보냈어요
         </p>
-        <p style={{ color:C.textMuted, fontSize:13, margin:"0 0 32px" }}>
-          메일의 링크를 클릭하면 가입이 완료됩니다
-        </p>
+        <p style={{ color:C.textMuted, fontSize:13, margin:"0 0 32px" }}>메일의 링크를 클릭하면 가입이 완료됩니다</p>
         <button onClick={()=>{ setVerified(false); setMode("login"); }}
           style={{ width:"100%", padding:"15px", borderRadius:12, border:"none", background:C.accent, color:"#fff", fontSize:16, fontWeight:700, cursor:"pointer" }}>
           로그인하러 가기
         </button>
-        <p style={{ color:C.textMuted, fontSize:12, marginTop:16 }}>
-          메일이 안 왔나요? 스팸함을 확인해보세요
-        </p>
+        <p style={{ color:C.textMuted, fontSize:12, marginTop:16 }}>메일이 안 왔나요? 스팸함을 확인해보세요</p>
       </div>
     </div>
   );
@@ -2794,25 +2155,15 @@ function FamilySetupScreen({ token, userId, onSetup }) {
     if (!familyName.trim()) return;
     setError(""); setLoading(true);
     try {
-      // 1) 가족 생성
       const families = await sb.insert("families", { name: familyName }, token);
-      const family = Array.isArray(families) ? families[0] : families;
-
-      // RLS로 인해 insert 후 빈 배열이 올 수 있음 — families 테이블 다시 조회
-      let familyId = family?.id;
+      let familyId = (Array.isArray(families) ? families[0] : families)?.id;
       if (!familyId) {
-        // 방금 만든 가족을 이름으로 다시 찾기
         const found = await sb.select("families", `name=eq.${encodeURIComponent(familyName)}&order=created_at.desc&limit=1`, token);
-        familyId = Array.isArray(found) ? found[0]?.id : found?.id;
+        familyId = (Array.isArray(found) ? found[0] : found)?.id;
       }
       if (!familyId) throw new Error("가족 생성에 실패했어요. 잠시 후 다시 시도해주세요");
-
-      // 2) 프로필 생성
       await sb.insert("profiles", { id: userId, family_id: familyId, name: familyName, role: "owner" }, token);
-
-      // 3) 기본 카테고리 시드
       await sb.rpc("seed_default_categories", { p_family_id: familyId }, token);
-
       onSetup(familyId);
     } catch(e) { setError(e.message); }
     setLoading(false);
@@ -2884,7 +2235,7 @@ function FamilySetupScreen({ token, userId, onSetup }) {
 
 // ── 메인 앱 ──────────────────────────────────────────────────
 export default function App() {
-  const [token,       setToken]       = useState(() => localStorage.getItem("sb_token") || null);
+  const [token,       setToken]       = useState(null);
   const [authUser,    setAuthUser]    = useState(null);
   const [profile,     setProfile]     = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -2897,117 +2248,103 @@ export default function App() {
   });
   const now = new Date();
 
-  // ── DB 데이터 로드 (token 직접 파라미터) ─────────────────
-  const loadAllData = async (familyId, tok) => {
-    try {
-      const txData = await sb.select("transactions",
-        `family_id=eq.${familyId}&parent_id=is.null&order=date.desc,created_at.desc`, tok);
-      const groups = (txData||[]).filter(t=>t.is_group);
-      let childMap = {};
-      if (groups.length > 0) {
-        const children = await sb.select("transactions",
-          `parent_id=in.(${groups.map(g=>g.id).join(",")})&order=date.asc`, tok);
-        (children||[]).forEach(c=>{
-          if (!childMap[c.parent_id]) childMap[c.parent_id]=[];
-          childMap[c.parent_id].push(c);
-        });
-      }
-      const txFormatted = (txData||[]).map(t=>
-        t.is_group ? {...t, children:childMap[t.id]||[], child_count:(childMap[t.id]||[]).length} : t
-      );
-      if (txFormatted.length > 0) setTransactionsLocal(txFormatted);
-
-      const recData = await sb.select("recurring_transactions",
-        `family_id=eq.${familyId}&order=day_of_month.asc`, tok);
-      if (recData?.length) setRecurringLocal(recData);
-
-      const yearMonth = new Date().toISOString().slice(0,7);
-      const budgetData = await sb.select("budgets",
-        `family_id=eq.${familyId}&year_month=eq.${yearMonth}`, tok);
-      if (budgetData?.length) {
-        const b = budgetData[0];
-        setBudgetsLocal({ totalEnabled:b.total_enabled, total:b.total||1500000, categories:b.categories||{} });
-      }
-    } catch(e) { console.error("데이터 로드 실패:", e); }
-  };
-
-  // ── 앱 시작 시 토큰으로 복원 (1번만) ────────────────────
+  // 앱 시작 시 1번만 실행
   useEffect(() => {
-    const tok = localStorage.getItem("sb_token");
-    if (!tok) { setAuthLoading(false); return; }
     (async () => {
+      const tok = localStorage.getItem("sb_token");
+      if (!tok) { setAuthLoading(false); return; }
       try {
         const user = await sb.getUser(tok);
         if (user.error || !user.id) {
-          localStorage.removeItem("sb_token");
-          setToken(null); setAuthLoading(false); return;
+          localStorage.removeItem("sb_token"); setAuthLoading(false); return;
         }
-        setAuthUser(user);
         setToken(tok);
-        const profiles = await sb.select("profiles", `id=eq.${user.id}`, tok);
-        if (profiles?.length) {
-          setProfile(profiles[0]);
-          if (profiles[0].family_id) await loadAllData(profiles[0].family_id, tok);
+        setAuthUser(user);
+        const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
+        if (pList?.length) {
+          setProfile(pList[0]);
+          if (pList[0].family_id) await _loadAll(pList[0].family_id, tok);
         }
-      } catch(e) { console.error("Auth 복원 실패:", e); }
+      } catch(e) { console.error(e); }
       setAuthLoading(false);
     })();
   }, []);
 
-  // ── 거래 추가 ────────────────────────────────────────────
+  const _loadAll = async (fid, tok) => {
+    try {
+      const txData = await sb.select("transactions",
+        `family_id=eq.${fid}&parent_id=is.null&order=date.desc,created_at.desc`, tok);
+      const groups = (txData||[]).filter(t=>t.is_group);
+      let cm = {};
+      if (groups.length > 0) {
+        const kids = await sb.select("transactions",
+          `parent_id=in.(${groups.map(g=>g.id).join(",")})&order=date.asc`, tok);
+        (kids||[]).forEach(c=>{ if(!cm[c.parent_id])cm[c.parent_id]=[]; cm[c.parent_id].push(c); });
+      }
+      const txFmt = (txData||[]).map(t=>t.is_group?{...t,children:cm[t.id]||[],child_count:(cm[t.id]||[]).length}:t);
+      if (txFmt.length>0) setTransactionsLocal(txFmt);
+
+      const recData = await sb.select("recurring_transactions",`family_id=eq.${fid}&order=day_of_month.asc`,tok);
+      if (recData?.length) setRecurringLocal(recData);
+
+      const ym = new Date().toISOString().slice(0,7);
+      const bData = await sb.select("budgets",`family_id=eq.${fid}&year_month=eq.${ym}`,tok);
+      if (bData?.length) {
+        const b=bData[0];
+        setBudgetsLocal({totalEnabled:b.total_enabled,total:b.total||1500000,categories:b.categories||{}});
+      }
+    } catch(e) { console.error("로드실패",e); }
+  };
+
   const addTransactions = useCallback(async (items) => {
-    setTransactionsLocal(prev => [...items, ...prev].sort((a,b)=>b.date.localeCompare(a.date)));
+    setTransactionsLocal(prev=>[...items,...prev].sort((a,b)=>b.date.localeCompare(a.date)));
     const tok = localStorage.getItem("sb_token");
     if (!tok) return;
     try {
       const user = await sb.getUser(tok);
       if (!user?.id) return;
-      const profileData = await sb.select("profiles", `id=eq.${user.id}`, tok);
-      const cp = profileData?.[0];
+      const pList = await sb.select("profiles",`id=eq.${user.id}`,tok);
+      const cp = pList?.[0];
       if (!cp?.family_id) return;
       for (const item of items) {
         const row = {
-          family_id: cp.family_id, user_id: cp.id,
-          type: item.type, amount: item.amount,
-          memo: item.memo, date: item.date,
-          category: item.category, is_group: item.is_group||false,
+          family_id:cp.family_id, user_id:cp.id,
+          type:item.type, amount:item.amount,
+          memo:item.memo, date:item.date,
+          category:item.category, is_group:item.is_group||false,
         };
-        const inserted = await sb.insert("transactions", row, tok);
-        const parent = Array.isArray(inserted) ? inserted[0] : inserted;
-        if (item.is_group && item.children?.length && parent?.id) {
+        const ins = await sb.insert("transactions", row, tok);
+        const par = Array.isArray(ins)?ins[0]:ins;
+        if (item.is_group && item.children?.length && par?.id) {
           await sb.insert("transactions",
             item.children.map(c=>({
-              family_id: cp.family_id, user_id: cp.id,
-              parent_id: parent.id, type: c.type||"expense",
-              amount: c.amount, memo: c.memo,
-              date: c.date||item.date, category: c.category, is_group: false,
+              family_id:cp.family_id, user_id:cp.id, parent_id:par.id,
+              type:c.type||"expense", amount:c.amount, memo:c.memo,
+              date:c.date||item.date, category:c.category, is_group:false,
             })), tok);
         }
       }
-      console.log("✅ DB 저장 완료");
-    } catch(e) { console.error("DB 저장 실패:", e); }
+    } catch(e) { console.error("저장실패",e); }
   }, []);
 
   const setTransactions = useCallback((updater) => {
-    setTransactionsLocal(prev => typeof updater==="function" ? updater(prev) : updater);
+    setTransactionsLocal(prev=>typeof updater==="function"?updater(prev):updater);
   }, []);
 
   const setRecurring = useCallback((updater) => {
-    setRecurringLocal(prev => typeof updater==="function" ? updater(prev) : updater);
+    setRecurringLocal(prev=>typeof updater==="function"?updater(prev):updater);
   }, []);
 
-  const setBudgets = useCallback(async (newBudgets) => {
-    setBudgetsLocal(newBudgets);
+  const setBudgets = useCallback(async (nb) => {
+    setBudgetsLocal(nb);
     const tok = localStorage.getItem("sb_token");
     if (!tok || !profile?.family_id) return;
     try {
-      await sb.upsert("budgets", {
-        family_id: profile.family_id,
-        year_month: new Date().toISOString().slice(0,7),
-        total: newBudgets.total, total_enabled: newBudgets.totalEnabled,
-        categories: newBudgets.categories,
-      }, "family_id,year_month", tok);
-    } catch(e) { console.error("예산 저장 실패:", e); }
+      await sb.upsert("budgets",{
+        family_id:profile.family_id, year_month:new Date().toISOString().slice(0,7),
+        total:nb.total, total_enabled:nb.totalEnabled, categories:nb.categories,
+      },"family_id,year_month",tok);
+    } catch(e) { console.error(e); }
   }, [profile]);
 
   const handleSignOut = async () => {
@@ -3018,8 +2355,6 @@ export default function App() {
     setTransactionsLocal(INIT_TRANSACTIONS);
   };
 
-  const TEST_MODE = false;
-
   if (authLoading) return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
       <div style={{ fontSize:40 }}>🏡</div>
@@ -3028,23 +2363,23 @@ export default function App() {
     </div>
   );
 
-  if (!TEST_MODE && (!token || !authUser)) return (
+  if (!token || !authUser) return (
     <AuthScreen onAuth={(tok, user) => {
       localStorage.setItem("sb_token", tok);
       setToken(tok); setAuthUser(user);
     }} />
   );
 
-  if (!TEST_MODE && !profile?.family_id) return (
+  if (!profile?.family_id) return (
     <FamilySetupScreen
       token={token}
-      userId={authUser?.id}
+      userId={authUser.id}
       onSetup={async (familyId) => {
         const tok = localStorage.getItem("sb_token");
-        const profiles = await sb.select("profiles", `id=eq.${authUser.id}`, tok);
-        if (profiles?.length) setProfile(profiles[0]);
-        else setProfile(p => ({...p, family_id: familyId}));
-        await loadAllData(familyId, tok);
+        const pList = await sb.select("profiles", `id=eq.${authUser.id}`, tok);
+        if (pList?.length) setProfile(pList[0]);
+        else setProfile(p=>({...p, family_id:familyId}));
+        await _loadAll(familyId, tok);
       }}
     />
   );
