@@ -2451,7 +2451,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.1.1",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.1.2",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -2956,17 +2956,30 @@ export default function App() {
         setToken(tok);
         setAuthUser(user);
         const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
-        _log("👨‍👩‍👧 프로필:", pList?.length ? "family_id="+pList[0].family_id : "없음");
+        _log("👨‍👩‍👧 프로필:", pList?.length ? "family_id="+pList[0].family_id : "없음 → 자동생성 시도");
         if (pList?.length) {
           setProfile(pList[0]);
           if (pList[0].family_id) {
             _log("📦 데이터 로드 시작");
             await _loadAll(pList[0].family_id, tok);
           } else {
-            _log("⚠️ family_id 없음");
+            _log("⚠️ family_id 없음 — 가족 설정 필요");
           }
         } else {
-          _log("⚠️ 프로필 없음");
+          // 프로필 없으면 자동 생성
+          _log("👤 프로필 자동 생성 시도");
+          try {
+            await sb.insert("profiles", {
+              id:   user.id,
+              name: user.email?.split("@")[0] || "사용자",
+              role: "member",
+            }, tok);
+            const newProfile = await sb.select("profiles", `id=eq.${user.id}`, tok);
+            if (newProfile?.length) {
+              setProfile(newProfile[0]);
+              _log("✅ 프로필 자동 생성 완료 — 가족 설정 필요");
+            }
+          } catch(e) { _log("❌ 프로필 생성 실패:", e.message); }
         }
       } catch(e) { _log("❌ Auth 실패:", e.message); }
       setAuthLoading(false);
@@ -2984,7 +2997,19 @@ export default function App() {
       if (!user?.id) return;
       const pList = await sb.select("profiles",`id=eq.${user.id}`,tok);
       _log("💾 프로필:", pList?.[0]?.family_id ? "family_id="+pList[0].family_id : "없음 pList="+JSON.stringify(pList));
-      const cp = pList?.[0];
+      let cp = pList?.[0];
+      // 프로필 없으면 자동 생성
+      if (!cp) {
+        _log("💾 프로필 없음 → 자동 생성");
+        await sb.insert("profiles", {
+          id: user.id,
+          name: user.email?.split("@")[0] || "사용자",
+          role: "member",
+        }, tok);
+        const newP = await sb.select("profiles",`id=eq.${user.id}`,tok);
+        cp = newP?.[0];
+        _log("💾 프로필 생성 후:", cp?.family_id ? "family_id="+cp.family_id : "family_id 없음");
+      }
       if (!cp?.family_id) { _log("❌ family_id없어 저장중단"); return; }
       for (const item of items) {
         const row = {
