@@ -2442,7 +2442,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.3.0",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.3.1",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -3146,8 +3146,7 @@ export default function App() {
             })), tok);
         }
       }
-    } catch(e) {
- }
+    } catch(e) { /* 저장 실패 무시 */ }
   }, []);
 
   const setTransactions = useCallback((updater) => {
@@ -3179,7 +3178,7 @@ export default function App() {
   };
 
   // ── 로딩 중 ───────────────────────────────────────────────
-  if (authLoading || (token && profileLoading)) return (
+  if (authLoading || profileLoading) return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
       <div style={{ fontSize:40 }}>🏡</div>
       <div style={{ width:32, height:32, border:`3px solid ${C.border}`, borderTopColor:C.accent, borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
@@ -3188,7 +3187,7 @@ export default function App() {
   );
 
   // ── 미로그인 ──────────────────────────────────────────────
-  if (!token || !authUser) return (
+  if (!token) return (
     <AuthScreen onAuth={async (tok, user, refreshTok) => {
       localStorage.setItem("sb_token", tok);
       if (refreshTok) localStorage.setItem("sb_refresh_token", refreshTok);
@@ -3219,10 +3218,11 @@ export default function App() {
   if (!profile?.family_id) return (
     <FamilySetupScreen
       token={token}
-      userId={authUser.id}
+      userId={profile?.id || authUser?.id}
       onSetup={async (familyId) => {
         const tok = localStorage.getItem("sb_token");
-        const pList = await sb.select("profiles", `id=eq.${authUser.id}`, tok);
+        const uid = profile?.id || authUser?.id;
+        const pList = await sb.select("profiles", `id=eq.${uid}`, tok);
         if (pList?.length) setProfile(pList[0]);
         else setProfile(p=>({...p, family_id:familyId}));
         await _loadAll(familyId, tok);
