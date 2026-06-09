@@ -2451,7 +2451,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.1.2",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.1.4",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -2722,11 +2722,26 @@ function AuthScreen({ onAuth }) {
       if (mode === "login") {
         const res = await sb.signIn(email, password);
         if (res.error) {
-          if (res.error.message?.includes("Invalid login") || res.error.message?.includes("invalid_credentials"))
-            throw new Error("이메일 또는 비밀번호가 올바르지 않아요");
-          if (res.error.message?.includes("Email not confirmed"))
+          const msg = res.error.message || "";
+          if (msg.includes("Invalid login") || msg.includes("invalid_credentials")) {
+            // 비밀번호 찾기 이메일 발송으로 이메일 존재 여부 확인
+            const resetRes = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+              body: JSON.stringify({ email }),
+            });
+            // 이메일이 없으면 422, 있으면 200
+            if (resetRes.status === 422 || resetRes.status === 400) {
+              throw new Error("가입되지 않은 이메일이에요. 회원가입을 먼저 해주세요");
+            } else {
+              throw new Error("비밀번호가 틀렸어요");
+            }
+          }
+          if (msg.includes("Email not confirmed"))
             throw new Error("이메일 인증이 완료되지 않았어요. 받은 편지함을 확인해주세요");
-          throw new Error(res.error.message || "로그인 실패");
+          if (msg.includes("Too many requests"))
+            throw new Error("잠시 후 다시 시도해주세요");
+          throw new Error(msg || "로그인 실패");
         }
         localStorage.setItem("sb_token", res.access_token);
         onAuth(res.access_token, res.user);
@@ -2821,6 +2836,7 @@ function FamilySetupScreen({ token, userId, onSetup }) {
     if (!familyName.trim()) return;
     setError(""); setLoading(true);
     try {
+      // 1) 가족 생성
       const families = await sb.insert("families", { name: familyName }, token);
       let familyId = (Array.isArray(families) ? families[0] : families)?.id;
       if (!familyId) {
@@ -2828,7 +2844,17 @@ function FamilySetupScreen({ token, userId, onSetup }) {
         familyId = (Array.isArray(found) ? found[0] : found)?.id;
       }
       if (!familyId) throw new Error("가족 생성에 실패했어요. 잠시 후 다시 시도해주세요");
-      await sb.insert("profiles", { id: userId, family_id: familyId, name: familyName, role: "owner" }, token);
+
+      // 2) 프로필에 family_id 업데이트 (이미 존재하는 경우)
+      await sb.update("profiles", { family_id: familyId, name: familyName, role: "owner" }, { id: userId }, token);
+
+      // 3) 혹시 프로필이 없으면 insert
+      const checkProfile = await sb.select("profiles", `id=eq.${userId}`, token);
+      if (!checkProfile?.length) {
+        await sb.insert("profiles", { id: userId, family_id: familyId, name: familyName, role: "owner" }, token);
+      }
+
+      // 4) 기본 카테고리 시드
       await sb.rpc("seed_default_categories", { p_family_id: familyId }, token);
       onSetup(familyId);
     } catch(e) { setError(e.message); }
@@ -2842,7 +2868,16 @@ function FamilySetupScreen({ token, userId, onSetup }) {
       const families = await sb.select("families", `invite_code=eq.${inviteCode.toUpperCase()}`, token);
       if (!families?.length) throw new Error("초대코드가 올바르지 않아요");
       const family = families[0];
-      await sb.insert("profiles", { id: userId, family_id: family.id, role: "member" }, token);
+
+      // 프로필에 family_id 업데이트
+      await sb.update("profiles", { family_id: family.id, role: "member" }, { id: userId }, token);
+
+      // 혹시 프로필 없으면 insert
+      const checkProfile = await sb.select("profiles", `id=eq.${userId}`, token);
+      if (!checkProfile?.length) {
+        await sb.insert("profiles", { id: userId, family_id: family.id, role: "member" }, token);
+      }
+
       onSetup(family.id);
     } catch(e) { setError(e.message); }
     setLoading(false);
@@ -3134,4 +3169,3 @@ export default function App() {
     </AppContext.Provider>
   );
 }
-
