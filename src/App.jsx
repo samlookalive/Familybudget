@@ -2442,7 +2442,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.3.1",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.3.2",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -2884,8 +2884,7 @@ function AuthScreen({ onAuth }) {
 }
 
 // ── 가족 설정 화면 ────────────────────────────────────────────
-function FamilySetupScreen({ token, userId, onSetup }) {
-  const { handleSignOut } = useApp();
+function FamilySetupScreen({ token, userId, onSetup, onSignOut }) {
   const [mode,       setMode]       = useState("choose");
   const [familyName, setFamilyName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -2948,7 +2947,7 @@ function FamilySetupScreen({ token, userId, onSetup }) {
       <div style={{ width:"100%", maxWidth:380 }}>
         {/* 로그아웃 버튼 */}
         <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:24 }}>
-          <button onClick={handleSignOut}
+          <button onClick={onSignOut}
             style={{ padding:"8px 14px", borderRadius:10, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>
             로그아웃
           </button>
@@ -3219,6 +3218,7 @@ export default function App() {
     <FamilySetupScreen
       token={token}
       userId={profile?.id || authUser?.id}
+      onSignOut={handleSignOut}
       onSetup={async (familyId) => {
         const tok = localStorage.getItem("sb_token");
         const uid = profile?.id || authUser?.id;
