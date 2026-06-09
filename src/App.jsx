@@ -174,7 +174,16 @@ const TREND_HISTORY = {
   expense: [980000,1200000,1500000,1100000,1050000],
 };
 
-// ── 카테고리 조회 헬퍼 (키 불일치 방어) ──────────────────────
+// ══════════════════════════════════════════════════════════════
+// 디버그 로그 (문제 해결 후 이 블록 전체 삭제)
+// ══════════════════════════════════════════════════════════════
+const _logs = [];
+const _log = (...args) => {
+  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a).slice(0,100) : String(a)).join(' ');
+  _logs.push({ time: new Date().toLocaleTimeString('ko-KR'), msg });
+  console.log(...args);
+};
+// ══════════════════════════════════════════════════════════════
 // transactions의 category 값은 "식비","교통","월세","구독","생활/마트" 등 다양
 // CATEGORIES 키와 name 양쪽으로 찾아서 반환
 function getCat(category) {
@@ -2449,6 +2458,9 @@ function SettingsScreen() {
               </div>
             ))}
           </div>
+          {/* ── 디버그 로그 뷰어 (해결 후 이 블록 삭제) ── */}
+          <DebugLogViewer />
+          {/* ── 디버그 로그 뷰어 끝 ── */}
         </div>
       )}
 
@@ -2590,6 +2602,36 @@ function SettingsScreen() {
     </div>
   );
 }
+
+// ── 디버그 로그 뷰어 (해결 후 이 블록 전체 삭제) ─────────────
+function DebugLogViewer() {
+  const [, forceUpdate] = useState(0);
+  return (
+    <div style={{ marginTop:12, background:"#1A1D27", borderRadius:14, padding:"14px", border:"1px solid #2A2F42" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+        <span style={{ color:"#7C9EFF", fontSize:12, fontWeight:700 }}>🐛 디버그 로그</span>
+        <button onClick={()=>{ _logs.length=0; forceUpdate(n=>n+1); }}
+          style={{ padding:"4px 10px", borderRadius:6, border:"1px solid #2A2F42", background:"transparent", color:"#6B7280", fontSize:11, cursor:"pointer" }}>
+          초기화
+        </button>
+      </div>
+      <button onClick={()=>forceUpdate(n=>n+1)}
+        style={{ width:"100%", padding:"8px", borderRadius:8, border:"1px solid #2A2F42", background:"#181C27", color:"#7C9EFF", fontSize:12, cursor:"pointer", marginBottom:8 }}>
+        🔄 새로고침
+      </button>
+      {_logs.length===0
+        ? <p style={{ color:"#6B7280", fontSize:12, margin:0, textAlign:"center" }}>로그 없음 — 앱 사용 후 새로고침</p>
+        : [..._logs].reverse().map((l,i)=>(
+          <div key={i} style={{ borderBottom:"1px solid #2A2F42", padding:"5px 0" }}>
+            <span style={{ color:"#6B7280", fontSize:10 }}>{l.time} </span>
+            <span style={{ color:"#E8EAF0", fontSize:11 }}>{l.msg}</span>
+          </div>
+        ))
+      }
+    </div>
+  );
+}
+// ── 디버그 로그 뷰어 끝 ──────────────────────────────────────
 
 function FamilyInfoCard() {
   const { token, profile, handleSignOut } = useApp();
@@ -2903,30 +2945,30 @@ export default function App() {
   useEffect(() => {
     (async () => {
       const tok = localStorage.getItem("sb_token");
-      console.log("🔑 저장된 토큰:", tok ? tok.slice(0,20)+"..." : "없음");
+      _log("🔑 토큰:", tok ? tok.slice(0,20)+"..." : "없음");
       if (!tok) { setAuthLoading(false); return; }
       try {
         const user = await sb.getUser(tok);
-        console.log("👤 getUser 결과:", user?.id ? "성공 id="+user.id : "실패", user?.error);
+        _log("👤 getUser:", user?.id ? "성공 id="+user.id : "실패", user?.error||"");
         if (user.error || !user.id) {
           localStorage.removeItem("sb_token"); setAuthLoading(false); return;
         }
         setToken(tok);
         setAuthUser(user);
         const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
-        console.log("👨‍👩‍👧 프로필 조회:", pList?.length ? "성공 family_id="+pList[0].family_id : "없음", pList);
+        _log("👨‍👩‍👧 프로필:", pList?.length ? "family_id="+pList[0].family_id : "없음");
         if (pList?.length) {
           setProfile(pList[0]);
           if (pList[0].family_id) {
-            console.log("📦 데이터 로드 시작 family_id="+pList[0].family_id);
+            _log("📦 데이터 로드 시작");
             await _loadAll(pList[0].family_id, tok);
           } else {
-            console.log("⚠️ family_id 없음 — 가족 설정 필요");
+            _log("⚠️ family_id 없음");
           }
         } else {
-          console.log("⚠️ 프로필 없음");
+          _log("⚠️ 프로필 없음");
         }
-      } catch(e) { console.error("❌ Auth 복원 실패:", e); }
+      } catch(e) { _log("❌ Auth 실패:", e.message); }
       setAuthLoading(false);
     })();
   }, []);
@@ -2934,16 +2976,16 @@ export default function App() {
   const addTransactions = useCallback(async (items) => {
     setTransactionsLocal(prev=>[...items,...prev].sort((a,b)=>b.date.localeCompare(a.date)));
     const tok = localStorage.getItem("sb_token");
-    console.log("💾 저장 시작 — 토큰:", tok ? "있음" : "없음");
+    _log("💾 저장시작 — 토큰:", tok ? "있음" : "없음");
     if (!tok) return;
     try {
       const user = await sb.getUser(tok);
-      console.log("💾 getUser:", user?.id ? "성공" : "실패", user?.error);
+      _log("💾 getUser:", user?.id ? "성공" : "실패 "+JSON.stringify(user?.error));
       if (!user?.id) return;
       const pList = await sb.select("profiles",`id=eq.${user.id}`,tok);
-      console.log("💾 프로필:", pList?.[0]?.family_id ? "family_id="+pList[0].family_id : "없음", pList);
+      _log("💾 프로필:", pList?.[0]?.family_id ? "family_id="+pList[0].family_id : "없음 pList="+JSON.stringify(pList));
       const cp = pList?.[0];
-      if (!cp?.family_id) { console.log("❌ family_id 없어서 저장 중단"); return; }
+      if (!cp?.family_id) { _log("❌ family_id없어 저장중단"); return; }
       for (const item of items) {
         const row = {
           family_id:cp.family_id, user_id:cp.id,
@@ -2951,9 +2993,9 @@ export default function App() {
           memo:item.memo, date:item.date,
           category:item.category, is_group:item.is_group||false,
         };
-        console.log("💾 insert 시도:", row);
+        _log("💾 insert:", item.memo, item.amount);
         const ins = await sb.insert("transactions", row, tok);
-        console.log("💾 insert 결과:", ins);
+        _log("💾 결과:", JSON.stringify(ins).slice(0,80));
         const par = Array.isArray(ins)?ins[0]:ins;
         if (item.is_group && item.children?.length && par?.id) {
           await sb.insert("transactions",
@@ -2964,8 +3006,8 @@ export default function App() {
             })), tok);
         }
       }
-      console.log("✅ DB 저장 완료");
-    } catch(e) { console.error("❌ 저장실패:", e); }
+      _log("✅ 저장완료");
+    } catch(e) { _log("❌ 저장실패:", e.message); }
   }, []);
 
   const setTransactions = useCallback((updater) => {
