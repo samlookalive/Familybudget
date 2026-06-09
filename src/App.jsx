@@ -2593,6 +2593,7 @@ function AuthScreen({ onAuth }) {
   const [name,     setName]     = useState("");
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
+  const [verified, setVerified] = useState(false); // 이메일 인증 대기 상태
 
   const handle = async () => {
     setError(""); setLoading(true);
@@ -2604,14 +2605,50 @@ function AuthScreen({ onAuth }) {
         onAuth(res.access_token, res.user);
       } else {
         const res = await sb.signUp(email, password);
-        if (res.error) throw new Error(res.error.message || "회원가입 실패");
-        // 프로필 생성은 가족 설정 후
+        if (res.error) {
+          // 이미 가입된 이메일 처리
+          if (res.error.message?.includes("already registered") ||
+              res.error.message?.includes("already been registered") ||
+              res.error.code === "user_already_exists") {
+            throw new Error("이미 가입된 이메일이에요. 로그인을 시도해보세요.");
+          }
+          throw new Error(res.error.message || "회원가입 실패");
+        }
+        // 이메일 인증 필요한 경우
+        if (!res.access_token) {
+          setVerified(true);
+          setLoading(false);
+          return;
+        }
         localStorage.setItem("sb_token", res.access_token);
         onAuth(res.access_token, res.user);
       }
     } catch(e) { setError(e.message); }
     setLoading(false);
   };
+
+  // 이메일 인증 대기 화면
+  if (verified) return (
+    <div style={{ minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px" }}>
+      <div style={{ width:"100%", maxWidth:380, textAlign:"center" }}>
+        <div style={{ fontSize:56, marginBottom:20 }}>📧</div>
+        <h2 style={{ color:C.text, fontSize:22, fontWeight:800, margin:"0 0 12px" }}>이메일을 확인해주세요</h2>
+        <p style={{ color:C.textMuted, fontSize:14, margin:"0 0 8px", lineHeight:1.6 }}>
+          <span style={{ color:C.accent, fontWeight:600 }}>{email}</span> 으로<br/>인증 링크를 보냈어요
+        </p>
+        <p style={{ color:C.textMuted, fontSize:13, margin:"0 0 32px" }}>
+          메일의 링크를 클릭하면 가입이 완료됩니다
+        </p>
+        <button onClick={()=>{ setVerified(false); setMode("login"); }}
+          style={{ width:"100%", padding:"15px", borderRadius:12, border:"none", background:C.accent, color:"#fff", fontSize:16, fontWeight:700, cursor:"pointer" }}>
+          로그인하러 가기
+        </button>
+        <p style={{ color:C.textMuted, fontSize:12, marginTop:16 }}>
+          메일이 안 왔나요? 스팸함을 확인해보세요
+        </p>
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px" }}>
@@ -2907,7 +2944,7 @@ export default function App() {
   };
 
   // ── 테스트 모드: Auth 우회 ─────────────────────────────────
-  const TEST_MODE = false; // 테스트 완료 후 false로 변경
+  const TEST_MODE = false; // 실제 배포 버전
 
   // ── 로딩 ─────────────────────────────────────────────────
   if (authLoading && !TEST_MODE) return (
