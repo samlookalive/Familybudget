@@ -2442,7 +2442,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.1.0",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.1.1",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -2903,20 +2903,30 @@ export default function App() {
   useEffect(() => {
     (async () => {
       const tok = localStorage.getItem("sb_token");
+      console.log("🔑 저장된 토큰:", tok ? tok.slice(0,20)+"..." : "없음");
       if (!tok) { setAuthLoading(false); return; }
       try {
         const user = await sb.getUser(tok);
+        console.log("👤 getUser 결과:", user?.id ? "성공 id="+user.id : "실패", user?.error);
         if (user.error || !user.id) {
           localStorage.removeItem("sb_token"); setAuthLoading(false); return;
         }
         setToken(tok);
         setAuthUser(user);
         const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
+        console.log("👨‍👩‍👧 프로필 조회:", pList?.length ? "성공 family_id="+pList[0].family_id : "없음", pList);
         if (pList?.length) {
           setProfile(pList[0]);
-          if (pList[0].family_id) await _loadAll(pList[0].family_id, tok);
+          if (pList[0].family_id) {
+            console.log("📦 데이터 로드 시작 family_id="+pList[0].family_id);
+            await _loadAll(pList[0].family_id, tok);
+          } else {
+            console.log("⚠️ family_id 없음 — 가족 설정 필요");
+          }
+        } else {
+          console.log("⚠️ 프로필 없음");
         }
-      } catch(e) { console.error(e); }
+      } catch(e) { console.error("❌ Auth 복원 실패:", e); }
       setAuthLoading(false);
     })();
   }, []);
@@ -2924,13 +2934,16 @@ export default function App() {
   const addTransactions = useCallback(async (items) => {
     setTransactionsLocal(prev=>[...items,...prev].sort((a,b)=>b.date.localeCompare(a.date)));
     const tok = localStorage.getItem("sb_token");
+    console.log("💾 저장 시작 — 토큰:", tok ? "있음" : "없음");
     if (!tok) return;
     try {
       const user = await sb.getUser(tok);
+      console.log("💾 getUser:", user?.id ? "성공" : "실패", user?.error);
       if (!user?.id) return;
       const pList = await sb.select("profiles",`id=eq.${user.id}`,tok);
+      console.log("💾 프로필:", pList?.[0]?.family_id ? "family_id="+pList[0].family_id : "없음", pList);
       const cp = pList?.[0];
-      if (!cp?.family_id) return;
+      if (!cp?.family_id) { console.log("❌ family_id 없어서 저장 중단"); return; }
       for (const item of items) {
         const row = {
           family_id:cp.family_id, user_id:cp.id,
@@ -2938,7 +2951,9 @@ export default function App() {
           memo:item.memo, date:item.date,
           category:item.category, is_group:item.is_group||false,
         };
+        console.log("💾 insert 시도:", row);
         const ins = await sb.insert("transactions", row, tok);
+        console.log("💾 insert 결과:", ins);
         const par = Array.isArray(ins)?ins[0]:ins;
         if (item.is_group && item.children?.length && par?.id) {
           await sb.insert("transactions",
@@ -2949,7 +2964,8 @@ export default function App() {
             })), tok);
         }
       }
-    } catch(e) { console.error("저장실패",e); }
+      console.log("✅ DB 저장 완료");
+    } catch(e) { console.error("❌ 저장실패:", e); }
   }, []);
 
   const setTransactions = useCallback((updater) => {
