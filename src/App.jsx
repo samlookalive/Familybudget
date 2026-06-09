@@ -2872,28 +2872,7 @@ export default function App() {
   });
   const now = new Date();
 
-  // 앱 시작 시 1번만 실행
-  useEffect(() => {
-    (async () => {
-      const tok = localStorage.getItem("sb_token");
-      if (!tok) { setAuthLoading(false); return; }
-      try {
-        const user = await sb.getUser(tok);
-        if (user.error || !user.id) {
-          localStorage.removeItem("sb_token"); setAuthLoading(false); return;
-        }
-        setToken(tok);
-        setAuthUser(user);
-        const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
-        if (pList?.length) {
-          setProfile(pList[0]);
-          if (pList[0].family_id) await _loadAll(pList[0].family_id, tok);
-        }
-      } catch(e) { console.error(e); }
-      setAuthLoading(false);
-    })();
-  }, []);
-
+  // ── DB 데이터 로드 ────────────────────────────────────────
   const _loadAll = async (fid, tok) => {
     try {
       const txData = await sb.select("transactions",
@@ -2919,6 +2898,28 @@ export default function App() {
       }
     } catch(e) { console.error("로드실패",e); }
   };
+
+  // ── 앱 시작 시 1번만 실행 ─────────────────────────────────
+  useEffect(() => {
+    (async () => {
+      const tok = localStorage.getItem("sb_token");
+      if (!tok) { setAuthLoading(false); return; }
+      try {
+        const user = await sb.getUser(tok);
+        if (user.error || !user.id) {
+          localStorage.removeItem("sb_token"); setAuthLoading(false); return;
+        }
+        setToken(tok);
+        setAuthUser(user);
+        const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
+        if (pList?.length) {
+          setProfile(pList[0]);
+          if (pList[0].family_id) await _loadAll(pList[0].family_id, tok);
+        }
+      } catch(e) { console.error(e); }
+      setAuthLoading(false);
+    })();
+  }, []);
 
   const addTransactions = useCallback(async (items) => {
     setTransactionsLocal(prev=>[...items,...prev].sort((a,b)=>b.date.localeCompare(a.date)));
