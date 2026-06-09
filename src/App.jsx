@@ -235,7 +235,7 @@ const Tag = ({ children, color }) => (
 );
 const AmountText = ({ amount, type, size=16 }) => (
   <span style={{ fontSize:size, fontWeight:700, color:type==="income"?C.income:C.expense, fontFamily:"'DM Mono',monospace" }}>
-    {type==="income"?"+":"-"}{fmt(amount)}원
+    {fmt(amount)}원
   </span>
 );
 
@@ -288,11 +288,20 @@ function calcTrend(transactions) {
 // 홈 화면
 // ══════════════════════════════════════════════════════════════
 function HomeScreen() {
-  const { transactions, recurring, budgets } = useApp();
+  const { transactions, recurring, budgets, profile } = useApp();
   const summary  = calcSummary(transactions);
   const catStats = calcCategoryStats(transactions);
   const { fixed, variable } = calcFixedVariable(transactions, recurring);
   const pct = summary.income > 0 ? Math.round((summary.expense/summary.income)*100) : 0;
+  const [familyName, setFamilyName] = useState("우리집");
+
+  useEffect(() => {
+    if (!profile?.family_id) return;
+    const tok = localStorage.getItem("sb_token");
+    if (!tok) return;
+    sb.select("families", `id=eq.${profile.family_id}`, tok)
+      .then(data => { if (data?.length) setFamilyName(data[0].name); });
+  }, [profile?.family_id]);
 
   // 고정비/변동비 드릴다운
   const [drillDown,    setDrillDown]    = useState(null); // null | "fixed" | "variable"
@@ -386,7 +395,7 @@ function HomeScreen() {
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
           <div>
             <p style={{ color:C.textMuted, fontSize:12, margin:0, letterSpacing:1, textTransform:"uppercase" }}>2026년 6월</p>
-            <h2 style={{ color:C.text, fontSize:22, margin:"4px 0 0", fontWeight:700 }}>우리집 가계부</h2>
+            <h2 style={{ color:C.text, fontSize:22, margin:"4px 0 0", fontWeight:700 }}>{familyName} 가계부</h2>
           </div>
           <div style={{ width:38, height:38, borderRadius:12, background:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👨‍👩‍👧</div>
         </div>
@@ -398,7 +407,7 @@ function HomeScreen() {
 
         {/* 지출 금액 크게 */}
         <p style={{ color:C.expense, fontSize:36, fontWeight:800, margin:"0 0 4px", fontFamily:"'DM Mono',monospace", letterSpacing:-1, lineHeight:1 }}>
-          -{fmt(summary.expense)}<span style={{ fontSize:17, fontWeight:400, color:C.textMuted, marginLeft:4 }}>원</span>
+          {fmt(summary.expense)}<span style={{ fontSize:17, fontWeight:400, color:C.textMuted, marginLeft:4 }}>원</span>
         </p>
 
         {/* 수입 대비 지출 % */}
@@ -415,12 +424,12 @@ function HomeScreen() {
         <div style={{ display:"flex", gap:24 }}>
           <div>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 3px" }}>수입</p>
-            <p style={{ color:C.income, fontSize:15, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>+{fmt(summary.income)}</p>
+            <p style={{ color:C.income, fontSize:15, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(summary.income)}</p>
           </div>
           <div style={{ width:1, background:C.border }} />
           <div>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 3px" }}>잔액</p>
-            <p style={{ color:"#1A1D27", fontSize:15, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{summary.balance>=0?"+":""}{fmt(summary.balance)}</p>
+            <p style={{ color:summary.balance>=0?C.income:C.expense, fontSize:15, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(summary.balance)}</p>
           </div>
         </div>
       </div>
@@ -2466,7 +2475,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.1.7",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.1.8",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
