@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.3.8";
+const APP_VERSION = "1.3.9";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -131,7 +131,9 @@ const sb = {
       headers: token ? sb.authHeaders(token) : sb.headers(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    const text = await res.text();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch(e) { return null; }
   },
 };
 
