@@ -161,21 +161,12 @@ const INIT_RECURRING = [];
 
 // 과거 6개월 트렌드 (1~5월은 고정, 6월은 실시간 계산)
 const TREND_HISTORY = {
-  months:  ["1월","2월","3월","4월","5월"],
-  income:  [3000000,3000000,3200000,3000000,3000000],
-  expense: [980000,1200000,1500000,1100000,1050000],
+  months:  [],
+  income:  [],
+  expense: [],
 };
 
-// ══════════════════════════════════════════════════════════════
-// 디버그 로그 (문제 해결 후 이 블록 전체 삭제)
-// ══════════════════════════════════════════════════════════════
-const _logs = [];
-const _log = (...args) => {
-  const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a).slice(0,100) : String(a)).join(' ');
-  _logs.push({ time: new Date().toLocaleTimeString('ko-KR'), msg });
-  console.log(...args);
-};
-// ══════════════════════════════════════════════════════════════
+
 // transactions의 category 값은 "식비","교통","월세","구독","생활/마트" 등 다양
 // CATEGORIES 키와 name 양쪽으로 찾아서 반환
 function getCat(category) {
@@ -371,7 +362,7 @@ function HomeScreen() {
       <div style={{ padding:"28px 20px 0", marginBottom:24 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
           <div>
-            <p style={{ color:C.textMuted, fontSize:12, margin:0, letterSpacing:1, textTransform:"uppercase" }}>2026년 6월</p>
+            <p style={{ color:C.textMuted, fontSize:12, margin:0, letterSpacing:1, textTransform:"uppercase" }}></p>
             <h2 style={{ color:C.text, fontSize:22, margin:"4px 0 0", fontWeight:700 }}>{familyName} 가계부</h2>
           </div>
           <div style={{ width:38, height:38, borderRadius:12, background:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👨‍👩‍👧</div>
@@ -726,7 +717,7 @@ function TransactionsScreen() {
       <div style={{ padding:"28px 20px 12px" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
           <div>
-            <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}>2026년 6월</p>
+            <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}></p>
             <h2 style={{ color:C.text, fontSize:20, margin:"4px 0 0", fontWeight:700 }}>거래 내역</h2>
           </div>
           <button onClick={()=>setShowSearch(s=>!s)}
@@ -1649,7 +1640,7 @@ function StatsScreen() {
   return (
     <div style={{ paddingBottom:80 }}>
       <div style={{ padding:"28px 20px 16px" }}>
-        <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}>2026년 6월</p>
+        <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}></p>
         <h2 style={{ color:C.text, fontSize:20, margin:"4px 0 0", fontWeight:700 }}>통계</h2>
       </div>
 
@@ -1979,7 +1970,7 @@ const COLOR_OPTIONS = ["#4B78C0","#E05C2A","#2DA870","#9B59B6","#E67E22","#E74C3
 // ── 가족 정보 카드 (설정 화면용) ─────────────────────────────
 function SettingsScreen() {
   const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets } = useApp();
-  const [settingTab, setSettingTab] = useState("categories");
+  const [settingTab, setSettingTab] = useState("recurring");
   const [categories, setCategories] = useState(INIT_CATEGORIES);
 
   // 카테고리 관리 state
@@ -2059,7 +2050,6 @@ function SettingsScreen() {
 
     // 해당 카테고리 사용 거래 수 계산 (알림용)
     const affectedCount = transactions.flatMap(t => t.is_group ? t.children : [t])
-      .filter(t => t.category === oldName).length;
 
     setDeleteConfirm(null);
     setEditingCat(null);
@@ -2208,7 +2198,7 @@ function SettingsScreen() {
 
         {/* 설정 내 탭 */}
         <div style={{ display:"flex", background:C.surfaceHigh, borderRadius:12, padding:4, gap:4, marginTop:16 }}>
-          {[{v:"categories",label:"카테고리",icon:"🏷️"},{v:"recurring",label:"정기지출",icon:"🔄"},{v:"budget",label:"예산",icon:"💰"},{v:"family",label:"가족/버전",icon:"👨‍👩‍👧"}].map(t=>(
+          {[{v:"recurring",label:"정기지출",icon:"🔄"},{v:"budget",label:"예산",icon:"💰"},{v:"categories",label:"카테고리",icon:"🏷️"},{v:"family",label:"정보",icon:"ℹ️"}].map(t=>(
             <button key={t.v} onClick={()=>setSettingTab(t.v)}
               style={{ flex:1, padding:"10px 6px", borderRadius:9, border:"none", background:settingTab===t.v?C.accent:"transparent",
                 color:settingTab===t.v?"#fff":C.textMuted, fontSize:9, fontWeight:settingTab===t.v?700:400, cursor:"pointer", transition:"all 0.2s", display:"flex", alignItems:"center", justifyContent:"center", gap:3 }}>
@@ -2452,7 +2442,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.2.0",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.2.3",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -2460,7 +2450,6 @@ function SettingsScreen() {
             ))}
           </div>
           {/* ── 디버그 로그 뷰어 (해결 후 이 블록 삭제) ── */}
-          <DebugLogViewer />
           {/* ── 디버그 로그 뷰어 끝 ── */}
         </div>
       )}
@@ -2604,35 +2593,6 @@ function SettingsScreen() {
   );
 }
 
-// ── 디버그 로그 뷰어 (해결 후 이 블록 전체 삭제) ─────────────
-function DebugLogViewer() {
-  const [, forceUpdate] = useState(0);
-  return (
-    <div style={{ marginTop:12, background:"#1A1D27", borderRadius:14, padding:"14px", border:"1px solid #2A2F42" }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-        <span style={{ color:"#7C9EFF", fontSize:12, fontWeight:700 }}>🐛 디버그 로그</span>
-        <button onClick={()=>{ _logs.length=0; forceUpdate(n=>n+1); }}
-          style={{ padding:"4px 10px", borderRadius:6, border:"1px solid #2A2F42", background:"transparent", color:"#6B7280", fontSize:11, cursor:"pointer" }}>
-          초기화
-        </button>
-      </div>
-      <button onClick={()=>forceUpdate(n=>n+1)}
-        style={{ width:"100%", padding:"8px", borderRadius:8, border:"1px solid #2A2F42", background:"#181C27", color:"#7C9EFF", fontSize:12, cursor:"pointer", marginBottom:8 }}>
-        🔄 새로고침
-      </button>
-      {_logs.length===0
-        ? <p style={{ color:"#6B7280", fontSize:12, margin:0, textAlign:"center" }}>로그 없음 — 앱 사용 후 새로고침</p>
-        : [..._logs].reverse().map((l,i)=>(
-          <div key={i} style={{ borderBottom:"1px solid #2A2F42", padding:"5px 0" }}>
-            <span style={{ color:"#6B7280", fontSize:10 }}>{l.time} </span>
-            <span style={{ color:"#E8EAF0", fontSize:11 }}>{l.msg}</span>
-          </div>
-        ))
-      }
-    </div>
-  );
-}
-// ── 디버그 로그 뷰어 끝 ──────────────────────────────────────
 
 function FamilyInfoCard() {
   const { token, profile, handleSignOut } = useApp();
@@ -2958,8 +2918,8 @@ export default function App() {
   const [transactions, setTransactionsLocal] = useState(INIT_TRANSACTIONS);
   const [recurring,    setRecurringLocal]    = useState(INIT_RECURRING);
   const [budgets,      setBudgetsLocal]      = useState({
-    totalEnabled: false, total: 1500000,
-    categories: { 식비:100000, 교통:50000, 쇼핑:100000 },
+    totalEnabled: false, total: 0,
+    categories: {},
   });
   const now = new Date();
 
@@ -2985,16 +2945,15 @@ export default function App() {
       const bData = await sb.select("budgets",`family_id=eq.${fid}&year_month=eq.${ym}`,tok);
       if (bData?.length) {
         const b=bData[0];
-        setBudgetsLocal({totalEnabled:b.total_enabled,total:b.total||1500000,categories:b.categories||{}});
+        setBudgetsLocal({totalEnabled:b.total_enabled,total:b.total||0,categories:b.categories||{}});
       }
-    } catch(e) { console.error("로드실패",e); }
+    } catch(e) { ; }
   };
 
   // ── 앱 시작 시 1번만 실행 ─────────────────────────────────
   useEffect(() => {
     (async () => {
       let tok = localStorage.getItem("sb_token");
-      _log("🔑 토큰:", tok ? tok.slice(0,20)+"..." : "없음");
       if (!tok) { setAuthLoading(false); return; }
       try {
         // 토큰 유효성 확인
@@ -3002,7 +2961,6 @@ export default function App() {
 
         // 토큰 만료 시 refresh_token으로 자동 갱신
         if (user.error || !user.id) {
-          _log("🔄 토큰 만료 — refresh 시도");
           const refreshTok = localStorage.getItem("sb_refresh_token");
           if (refreshTok) {
             const refreshed = await sb.refreshToken(refreshTok);
@@ -3011,9 +2969,7 @@ export default function App() {
               localStorage.setItem("sb_token", tok);
               if (refreshed.refresh_token) localStorage.setItem("sb_refresh_token", refreshed.refresh_token);
               user = await sb.getUser(tok);
-              _log("✅ 토큰 갱신 성공");
             } else {
-              _log("❌ 토큰 갱신 실패 — 재로그인 필요");
               localStorage.removeItem("sb_token");
               localStorage.removeItem("sb_refresh_token");
               setAuthLoading(false); return;
@@ -3023,23 +2979,17 @@ export default function App() {
             setAuthLoading(false); return;
           }
         }
-
-        _log("👤 getUser:", user?.id ? "성공 id="+user.id : "실패", user?.error||"");
         setToken(tok);
         setAuthUser(user);
         const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
-        _log("👨‍👩‍👧 프로필:", pList?.length ? "family_id="+pList[0].family_id : "없음 → 자동생성 시도");
         if (pList?.length) {
           setProfile(pList[0]);
           if (pList[0].family_id) {
-            _log("📦 데이터 로드 시작");
             await _loadAll(pList[0].family_id, tok);
           } else {
-            _log("⚠️ family_id 없음 — 가족 설정 필요");
           }
         } else {
           // 프로필 없으면 자동 생성
-          _log("👤 프로필 자동 생성 시도");
           try {
             await sb.insert("profiles", {
               id:   user.id,
@@ -3049,11 +2999,12 @@ export default function App() {
             const newProfile = await sb.select("profiles", `id=eq.${user.id}`, tok);
             if (newProfile?.length) {
               setProfile(newProfile[0]);
-              _log("✅ 프로필 자동 생성 완료 — 가족 설정 필요");
             }
-          } catch(e) { _log("❌ 프로필 생성 실패:", e.message); }
+          } catch(e) {
+ }
         }
-      } catch(e) { _log("❌ Auth 실패:", e.message); }
+      } catch(e) {
+ }
       setAuthLoading(false);
     })();
   }, []);
@@ -3061,18 +3012,14 @@ export default function App() {
   const addTransactions = useCallback(async (items) => {
     setTransactionsLocal(prev=>[...items,...prev].sort((a,b)=>b.date.localeCompare(a.date)));
     const tok = localStorage.getItem("sb_token");
-    _log("💾 저장시작 — 토큰:", tok ? "있음" : "없음");
     if (!tok) return;
     try {
       const user = await sb.getUser(tok);
-      _log("💾 getUser:", user?.id ? "성공" : "실패 "+JSON.stringify(user?.error));
       if (!user?.id) return;
       const pList = await sb.select("profiles",`id=eq.${user.id}`,tok);
-      _log("💾 프로필:", pList?.[0]?.family_id ? "family_id="+pList[0].family_id : "없음 pList="+JSON.stringify(pList));
       let cp = pList?.[0];
       // 프로필 없으면 자동 생성
       if (!cp) {
-        _log("💾 프로필 없음 → 자동 생성");
         await sb.insert("profiles", {
           id: user.id,
           name: user.email?.split("@")[0] || "사용자",
@@ -3080,9 +3027,9 @@ export default function App() {
         }, tok);
         const newP = await sb.select("profiles",`id=eq.${user.id}`,tok);
         cp = newP?.[0];
-        _log("💾 프로필 생성 후:", cp?.family_id ? "family_id="+cp.family_id : "family_id 없음");
       }
-      if (!cp?.family_id) { _log("❌ family_id없어 저장중단"); return; }
+      if (!cp?.family_id) {
+ return; }
       for (const item of items) {
         const row = {
           family_id:cp.family_id, user_id:cp.id,
@@ -3090,9 +3037,7 @@ export default function App() {
           memo:item.memo, date:item.date,
           category:item.category, is_group:item.is_group||false,
         };
-        _log("💾 insert:", item.memo, item.amount);
         const ins = await sb.insert("transactions", row, tok);
-        _log("💾 결과:", JSON.stringify(ins).slice(0,80));
         const par = Array.isArray(ins)?ins[0]:ins;
         if (item.is_group && item.children?.length && par?.id) {
           await sb.insert("transactions",
@@ -3103,8 +3048,8 @@ export default function App() {
             })), tok);
         }
       }
-      _log("✅ 저장완료");
-    } catch(e) { _log("❌ 저장실패:", e.message); }
+    } catch(e) {
+ }
   }, []);
 
   const setTransactions = useCallback((updater) => {
@@ -3124,7 +3069,7 @@ export default function App() {
         family_id:profile.family_id, year_month:new Date().toISOString().slice(0,7),
         total:nb.total, total_enabled:nb.totalEnabled, categories:nb.categories,
       },"family_id,year_month",tok);
-    } catch(e) { console.error(e); }
+    } catch(e) { ; }
   }, [profile]);
 
   const handleSignOut = async () => {
@@ -3163,7 +3108,8 @@ export default function App() {
           const newP = await sb.select("profiles", `id=eq.${user.id}`, tok);
           if (newP?.length) setProfile(newP[0]);
         }
-      } catch(e) { _log("❌ onAuth 프로필 로드 실패:", e.message); }
+      } catch(e) {
+ }
     }} />
   );
 
