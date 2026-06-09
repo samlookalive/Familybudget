@@ -1966,6 +1966,76 @@ const INIT_CATEGORIES = {
 const ICON_OPTIONS = ["🍚","🚌","🛍️","💊","🏪","🎬","✈️","🏠","📱","💴","📈","🎁","💡","📦","☕","🐶","💪","🎮","📚","🚗","⚡","🛡️","📡","🎵","🏋️","🍕","🏖️","💐","🎂","🔑"];
 const COLOR_OPTIONS = ["#4B78C0","#E05C2A","#2DA870","#9B59B6","#E67E22","#E74C3C","#1ABC9C","#F39C12","#3498DB","#9CA3AF"];
 
+// ── 가족 정보 카드 (설정 화면용) ─────────────────────────────
+function FamilyInfoCard() {
+  const { profile, token, handleSignOut } = useApp();
+  const [family,  setFamily]  = useState(null);
+  const [copied,  setCopied]  = useState(false);
+
+  useEffect(() => {
+    if (!profile?.family_id || !token) return;
+    sb.select("families", `id=eq.${profile.family_id}`, token)
+      .then(data => { if (data?.length) setFamily(data[0]); });
+  }, [profile, token]);
+
+  const copyCode = () => {
+    if (!family?.invite_code) return;
+    navigator.clipboard?.writeText(family.invite_code).then(()=>{
+      setCopied(true);
+      setTimeout(()=>setCopied(false), 2000);
+    }).catch(()=>{
+      // clipboard API 없을 때 fallback
+      setCopied(true);
+      setTimeout(()=>setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, padding:"16px" }}>
+      {/* 가족명 + 내 이름 */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ width:38, height:38, borderRadius:12, background:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>
+            👨‍👩‍👧
+          </div>
+          <div>
+            <p style={{ color:C.text, fontSize:14, fontWeight:700, margin:0 }}>
+              {family?.name || "우리 가족"}
+            </p>
+            <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>
+              {profile?.name || ""} · {profile?.role === "owner" ? "가족장" : "멤버"}
+            </p>
+          </div>
+        </div>
+        {/* 로그아웃 */}
+        <button onClick={handleSignOut}
+          style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>
+          로그아웃
+        </button>
+      </div>
+
+      {/* 초대코드 */}
+      <div style={{ background:C.surfaceHigh, borderRadius:12, padding:"12px 14px" }}>
+        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", fontWeight:600 }}>
+          🔑 가족 초대코드
+        </p>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ color:C.accent, fontSize:24, fontWeight:800, letterSpacing:6, fontFamily:"'DM Mono',monospace" }}>
+            {family?.invite_code || "------"}
+          </span>
+          <button onClick={copyCode}
+            style={{ padding:"8px 16px", borderRadius:10, border:"none", background:copied?C.income:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer", transition:"background 0.2s" }}>
+            {copied ? "✓ 복사됨" : "복사"}
+          </button>
+        </div>
+        <p style={{ color:C.textMuted, fontSize:11, margin:"8px 0 0", lineHeight:1.5 }}>
+          이 코드를 가족에게 공유하면 같은 가계부를 함께 쓸 수 있어요
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function SettingsScreen() {
   const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets } = useApp();
   const [settingTab, setSettingTab] = useState("categories");
@@ -2194,8 +2264,12 @@ function SettingsScreen() {
       <div style={{ padding:"28px 20px 0" }}>
         <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}>관리</p>
         <h2 style={{ color:C.text, fontSize:20, margin:"4px 0 16px", fontWeight:700 }}>설정</h2>
+
+        {/* 가족 정보 카드 */}
+        <FamilyInfoCard />
+
         {/* 설정 내 탭 */}
-        <div style={{ display:"flex", background:C.surfaceHigh, borderRadius:12, padding:4, gap:4 }}>
+        <div style={{ display:"flex", background:C.surfaceHigh, borderRadius:12, padding:4, gap:4, marginTop:16 }}>
           {[{v:"categories",label:"카테고리",icon:"🏷️"},{v:"recurring",label:"정기지출",icon:"🔄"},{v:"budget",label:"예산",icon:"💰"}].map(t=>(
             <button key={t.v} onClick={()=>setSettingTab(t.v)}
               style={{ flex:1, padding:"10px 6px", borderRadius:9, border:"none", background:settingTab===t.v?C.accent:"transparent",
@@ -2836,11 +2910,14 @@ export default function App() {
         setToken(null); setAuthLoading(false); return;
       }
       setAuthUser(user);
-      // 프로필 조회
-      const profiles = await sb.select("profiles", `id=eq.${user.id}&select=*,families(*)`, token);
-      if (profiles?.length) {
+      // 프로필 조회 — select 문법 단순화
+      const profiles = await sb.select("profiles", `id=eq.${user.id}`, token);
+      if (profiles?.length && profiles[0].family_id) {
         setProfile(profiles[0]);
-        if (profiles[0].family_id) loadAllData(profiles[0].family_id);
+        loadAllData(profiles[0].family_id);
+      } else if (profiles?.length) {
+        // 프로필은 있는데 가족이 없는 경우
+        setProfile(profiles[0]);
       }
       setAuthLoading(false);
     }).catch(() => { setAuthLoading(false); });
@@ -2997,9 +3074,15 @@ export default function App() {
   if (!TEST_MODE && !profile?.family_id) return (
     <FamilySetupScreen
       token={token}
-      userId={authUser.id}
-      onSetup={(familyId) => {
-        setProfile(p => ({ ...p, family_id: familyId }));
+      userId={authUser?.id}
+      onSetup={async (familyId) => {
+        // 프로필 재조회로 확실하게 반영
+        const profiles = await sb.select("profiles", `id=eq.${authUser.id}`, token);
+        if (profiles?.length) {
+          setProfile(profiles[0]);
+        } else {
+          setProfile(p => ({ ...p, family_id: familyId }));
+        }
         loadAllData(familyId);
       }}
     />
