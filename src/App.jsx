@@ -1,4 +1,4 @@
-import { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
+import React, { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
