@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.3.9";
+const APP_VERSION = "1.4.1";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -2649,12 +2649,16 @@ function FamilyInfoCard() {
       await sb.delete("recurring_transactions", { family_id: fid }, token);
       // 3) 예산 삭제
       await sb.delete("budgets", { family_id: fid }, token);
-      // 4) 카테고리 삭제
-      await sb.delete("categories", { family_id: fid }, token);
-      // 5) 프로필 family_id null (모든 멤버)
-      await sb.update("profiles", { family_id: null }, { family_id: fid }, token);
-      // 6) 가족 삭제 (id로)
+      // 4) 카테고리 하위 먼저 삭제
+      const allCats = await sb.select("categories", `family_id=eq.${fid}`, token);
+      const childCats = (allCats||[]).filter(c=>c.parent_id);
+      const parentCats = (allCats||[]).filter(c=>!c.parent_id);
+      for (const c of childCats) await sb.delete("categories", { id: c.id }, token);
+      for (const c of parentCats) await sb.delete("categories", { id: c.id }, token);
+      // 5) 가족 삭제 (profiles null 처리 전에 먼저!)
       await sb.delete("families", { id: fid }, token);
+      // 6) 프로필 family_id null - id로 직접 지정
+      await sb.update("profiles", { family_id: null }, { id: profile.id }, token);
 
       setProfile(p => ({ ...p, family_id: null }));
       setTransactions([]);
