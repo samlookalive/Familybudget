@@ -88,7 +88,18 @@ const sb = {
       headers: sb.headers(),
       body: JSON.stringify({ email, password }),
     });
-    return res.json();
+    const text = await res.text();
+    return text ? JSON.parse(text) : {};
+  },
+
+  async refreshToken(refreshTok) {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: sb.headers(),
+      body: JSON.stringify({ refresh_token: refreshTok }),
+    });
+    const text = await res.text();
+    return text ? JSON.parse(text) : {};
   },
 
   async signOut(token) {
@@ -2455,7 +2466,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.1.6",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.1.7",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -2713,12 +2724,13 @@ const TABS = [
 // ── 로그인/회원가입 화면 ──────────────────────────────────────
 function AuthScreen({ onAuth }) {
   const [mode,     setMode]     = useState("login");
-  const [email,    setEmail]    = useState("");
+  const [email,    setEmail]    = useState(() => localStorage.getItem("sb_saved_email") || "");
   const [password, setPassword] = useState("");
   const [name,     setName]     = useState("");
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
   const [verified, setVerified] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(() => !!localStorage.getItem("sb_saved_email"));
 
   const handle = async () => {
     setError(""); setLoading(true);
@@ -2748,7 +2760,10 @@ function AuthScreen({ onAuth }) {
           throw new Error(msg || "로그인 실패");
         }
         localStorage.setItem("sb_token", res.access_token);
-        onAuth(res.access_token, res.user);
+        if (res.refresh_token) localStorage.setItem("sb_refresh_token", res.refresh_token);
+        if (rememberEmail) localStorage.setItem("sb_saved_email", email);
+        else localStorage.removeItem("sb_saved_email");
+        onAuth(res.access_token, res.user, res.refresh_token);
       } else {
         const res = await sb.signUp(email, password);
         if (res.error) {
@@ -2758,7 +2773,8 @@ function AuthScreen({ onAuth }) {
         }
         if (!res.access_token) { setVerified(true); setLoading(false); return; }
         localStorage.setItem("sb_token", res.access_token);
-        onAuth(res.access_token, res.user);
+        if (res.refresh_token) localStorage.setItem("sb_refresh_token", res.refresh_token);
+        onAuth(res.access_token, res.user, res.refresh_token);
       }
     } catch(e) { setError(e.message); }
     setLoading(false);
@@ -2819,6 +2835,14 @@ function AuthScreen({ onAuth }) {
           </div>
         </div>
         {error && <p style={{ color:C.expense, fontSize:13, marginBottom:12, textAlign:"center" }}>{error}</p>}
+        {mode==="login" && (
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+            <input type="checkbox" id="remember" checked={rememberEmail}
+              onChange={e=>setRememberEmail(e.target.checked)}
+              style={{ width:16, height:16, accentColor:C.accent, cursor:"pointer" }} />
+            <label htmlFor="remember" style={{ color:C.textMuted, fontSize:13, cursor:"pointer" }}>이메일 기억하기</label>
+          </div>
+        )}
         <button onClick={handle} disabled={loading}
           style={{ width:"100%", padding:"15px", borderRadius:12, border:"none", background:loading?C.border:C.accent, color:"#fff", fontSize:16, fontWeight:700, cursor:loading?"default":"pointer" }}>
           {loading?"처리 중...":mode==="login"?"로그인":"회원가입"}
@@ -2983,15 +3007,38 @@ export default function App() {
   // ── 앱 시작 시 1번만 실행 ─────────────────────────────────
   useEffect(() => {
     (async () => {
-      const tok = localStorage.getItem("sb_token");
+      let tok = localStorage.getItem("sb_token");
       _log("🔑 토큰:", tok ? tok.slice(0,20)+"..." : "없음");
       if (!tok) { setAuthLoading(false); return; }
       try {
-        const user = await sb.getUser(tok);
-        _log("👤 getUser:", user?.id ? "성공 id="+user.id : "실패", user?.error||"");
+        // 토큰 유효성 확인
+        let user = await sb.getUser(tok);
+
+        // 토큰 만료 시 refresh_token으로 자동 갱신
         if (user.error || !user.id) {
-          localStorage.removeItem("sb_token"); setAuthLoading(false); return;
+          _log("🔄 토큰 만료 — refresh 시도");
+          const refreshTok = localStorage.getItem("sb_refresh_token");
+          if (refreshTok) {
+            const refreshed = await sb.refreshToken(refreshTok);
+            if (refreshed.access_token) {
+              tok = refreshed.access_token;
+              localStorage.setItem("sb_token", tok);
+              if (refreshed.refresh_token) localStorage.setItem("sb_refresh_token", refreshed.refresh_token);
+              user = await sb.getUser(tok);
+              _log("✅ 토큰 갱신 성공");
+            } else {
+              _log("❌ 토큰 갱신 실패 — 재로그인 필요");
+              localStorage.removeItem("sb_token");
+              localStorage.removeItem("sb_refresh_token");
+              setAuthLoading(false); return;
+            }
+          } else {
+            localStorage.removeItem("sb_token");
+            setAuthLoading(false); return;
+          }
         }
+
+        _log("👤 getUser:", user?.id ? "성공 id="+user.id : "실패", user?.error||"");
         setToken(tok);
         setAuthUser(user);
         const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
@@ -3111,8 +3158,9 @@ export default function App() {
   );
 
   if (!token || !authUser) return (
-    <AuthScreen onAuth={async (tok, user) => {
+    <AuthScreen onAuth={async (tok, user, refreshTok) => {
       localStorage.setItem("sb_token", tok);
+      if (refreshTok) localStorage.setItem("sb_refresh_token", refreshTok);
       setToken(tok); setAuthUser(user);
       // 로그인 즉시 프로필 로드
       try {
@@ -3121,7 +3169,6 @@ export default function App() {
           setProfile(pList[0]);
           if (pList[0].family_id) await _loadAll(pList[0].family_id, tok);
         } else {
-          // 프로필 없으면 자동 생성
           await sb.insert("profiles", {
             id: user.id,
             name: user.email?.split("@")[0] || "사용자",
