@@ -1,7 +1,8 @@
 import React, { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
 // ============================================================
-// 우리집 가계부 App v1.3.5
+// 우리집 가계부 App
 // ============================================================
+const APP_VERSION = "1.3.7";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -33,7 +34,8 @@ const sb = {
       headers: token ? sb.authHeaders(token) : sb.headers(),
     });
     const text = await res.text();
-    return text ? JSON.parse(text) : [];
+    if (!text) return [];
+    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
   },
 
   async insert(table, data, token) {
@@ -43,7 +45,8 @@ const sb = {
       body: JSON.stringify(data),
     });
     const text = await res.text();
-    return text ? JSON.parse(text) : [];
+    if (!text) return [];
+    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
   },
 
   async update(table, data, match, token) {
@@ -54,15 +57,8 @@ const sb = {
       body: JSON.stringify(data),
     });
     const text = await res.text();
-    return text ? JSON.parse(text) : [];
-  },
-
-  async delete(table, match, token) {
-    const q = Object.entries(match).map(([k,v])=>`${k}=eq.${v}`).join("&");
-    await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, {
-      method: "DELETE",
-      headers: sb.authHeaders(token),
-    });
+    if (!text) return [];
+    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
   },
 
   async upsert(table, data, onConflict, token) {
@@ -72,7 +68,8 @@ const sb = {
       body: JSON.stringify(data),
     });
     const text = await res.text();
-    return text ? JSON.parse(text) : [];
+    if (!text) return [];
+    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
   },
 
   // Auth
@@ -2444,7 +2441,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.3.5",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v"+APP_VERSION,accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
@@ -2899,6 +2896,12 @@ function FamilySetupScreen({ token, userId, onSetup, onSignOut }) {
     try {
       // 1) 가족 생성
       const families = await sb.insert("families", { name: familyName }, token);
+
+      // 응답이 오류 객체인지 확인
+      if (families?.code || families?.error || families?.message) {
+        throw new Error(families.message || families.error || "가족 생성 실패");
+      }
+
       const family = Array.isArray(families) ? families[0] : families;
       const familyId = family?.id;
       if (!familyId) throw new Error("가족 생성에 실패했어요. 잠시 후 다시 시도해주세요");
