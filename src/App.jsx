@@ -2907,7 +2907,7 @@ export default function App() {
   };
 
   // ── 테스트 모드: Auth 우회 ─────────────────────────────────
-  const TEST_MODE = true; // 테스트 완료 후 false로 변경
+  const TEST_MODE = false; // 테스트 완료 후 false로 변경
 
   // ── 로딩 ─────────────────────────────────────────────────
   if (authLoading && !TEST_MODE) return (
