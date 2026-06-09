@@ -156,31 +156,8 @@ const CAT_ICON_MAP = {
 };
 
 // ── 초기 더미 거래 내역 ───────────────────────────────────────
-const INIT_TRANSACTIONS = [
-  { id:"t1", type:"expense", amount:100000, memo:"여름휴가여행", date:"2026-06-01", category:"여행",     is_group:true,  child_count:3, children:[
-    { id:"t1a", amount:50000, memo:"숙박비", date:"2026-06-01", category:"여행",  type:"expense" },
-    { id:"t1b", amount:30000, memo:"식비",   date:"2026-06-02", category:"식비",  type:"expense" },
-    { id:"t1c", amount:20000, memo:"교통비", date:"2026-06-02", category:"교통",  type:"expense" },
-  ]},
-  { id:"t2", type:"expense", amount:35000,   memo:"이마트 장보기",  date:"2026-06-03", category:"생활/마트", is_group:false },
-  { id:"t3", type:"expense", amount:6500,    memo:"스타벅스",       date:"2026-06-03", category:"식비",      is_group:false },
-  { id:"t4", type:"income",  amount:3000000, memo:"6월 월급",        date:"2026-06-01", category:"월급",      is_group:false },
-  { id:"t5", type:"expense", amount:650000,  memo:"월세",            date:"2026-06-01", category:"월세",      is_group:false },
-  { id:"t6", type:"expense", amount:28000,   memo:"버스/지하철",     date:"2026-06-04", category:"교통",      is_group:false },
-  { id:"t7", type:"expense", amount:85000,   memo:"넷플릭스+유튜브", date:"2026-06-01", category:"구독",      is_group:false },
-  { id:"t8", type:"expense", amount:42000,   memo:"약국",            date:"2026-06-02", category:"의료/건강", is_group:false },
-];
-
-const INIT_RECURRING = [
-  { id:"r1", name:"넷플릭스",         amount:17000,  amount_type:"fixed",    day_of_month:12, category:"구독",     icon:"📺", is_active:true,  status:"registered"   },
-  { id:"r2", name:"유튜브 프리미엄",  amount:14900,  amount_type:"fixed",    day_of_month:15, category:"구독",     icon:"▶️", is_active:true,  status:"registered"   },
-  { id:"r3", name:"핸드폰 요금 (남)", amount:55000,  amount_type:"fixed",    day_of_month:17, category:"구독",     icon:"📱", is_active:true,  status:"pending_date" },
-  { id:"r4", name:"핸드폰 요금 (아)", amount:49000,  amount_type:"fixed",    day_of_month:17, category:"구독",     icon:"📱", is_active:true,  status:"pending_date" },
-  { id:"r5", name:"관리비",           amount:null,   amount_type:"variable", day_of_month:25, category:"월세",     icon:"🏠", is_active:true,  status:"need_input",  last_amount:87000 },
-  { id:"r6", name:"전기세",           amount:null,   amount_type:"variable", day_of_month:20, category:"월세",     icon:"⚡", is_active:true,  status:"need_input",  last_amount:42000 },
-  { id:"r7", name:"월세",             amount:650000, amount_type:"fixed",    day_of_month:1,  category:"월세",     icon:"🏠", is_active:true,  status:"registered"   },
-  { id:"r8", name:"헬스장",           amount:60000,  amount_type:"fixed",    day_of_month:1,  category:"의료/건강",icon:"💪", is_active:false, status:"inactive"     },
-];
+const INIT_TRANSACTIONS = [];
+const INIT_RECURRING = [];
 
 // 과거 6개월 트렌드 (1~5월은 고정, 6월은 실시간 계산)
 const TREND_HISTORY = {
@@ -2475,7 +2452,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.1.8",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.2.0",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
