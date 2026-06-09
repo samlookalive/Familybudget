@@ -29,7 +29,8 @@ const sb = {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
       headers: token ? sb.authHeaders(token) : sb.headers(),
     });
-    return res.json();
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
   },
 
   async insert(table, data, token) {
@@ -38,7 +39,8 @@ const sb = {
       headers: sb.authHeaders(token, { "Prefer": "return=representation" }),
       body: JSON.stringify(data),
     });
-    return res.json();
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
   },
 
   async update(table, data, match, token) {
@@ -48,7 +50,8 @@ const sb = {
       headers: sb.authHeaders(token, { "Prefer": "return=representation" }),
       body: JSON.stringify(data),
     });
-    return res.json();
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
   },
 
   async delete(table, match, token) {
@@ -65,7 +68,8 @@ const sb = {
       headers: sb.authHeaders(token, { "Prefer": "return=representation,resolution=merge-duplicates" }),
       body: JSON.stringify(data),
     });
-    return res.json();
+    const text = await res.text();
+    return text ? JSON.parse(text) : [];
   },
 
   // Auth
@@ -2451,7 +2455,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.1.4",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.1.5",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
