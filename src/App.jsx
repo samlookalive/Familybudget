@@ -2884,178 +2884,143 @@ function FamilySetupScreen({ token, userId, onSetup }) {
 
 // ── 메인 앱 ──────────────────────────────────────────────────
 export default function App() {
-  // ── Auth 상태 ─────────────────────────────────────────────
-  const [token,    setToken]    = useState(() => localStorage.getItem("sb_token") || null);
-  const [authUser, setAuthUser] = useState(null);
-  const [profile,  setProfile]  = useState(null);
+  const [token,       setToken]       = useState(() => localStorage.getItem("sb_token") || null);
+  const [authUser,    setAuthUser]    = useState(null);
+  const [profile,     setProfile]     = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-
-  // ── App 상태 ──────────────────────────────────────────────
-  const [activeTab,    setActiveTab]    = useState("home");
+  const [activeTab,   setActiveTab]   = useState("home");
   const [transactions, setTransactionsLocal] = useState(INIT_TRANSACTIONS);
   const [recurring,    setRecurringLocal]    = useState(INIT_RECURRING);
   const [budgets,      setBudgetsLocal]      = useState({
     totalEnabled: false, total: 1500000,
     categories: { 식비:100000, 교통:50000, 쇼핑:100000 },
   });
-  const [dbConnected, setDbConnected] = useState(false);
   const now = new Date();
 
-  // ── 토큰으로 유저/프로필 복원 ────────────────────────────
-  useEffect(() => {
-    if (!token) { setAuthLoading(false); return; }
-    sb.getUser(token).then(async (user) => {
-      if (user.error || !user.id) {
-        localStorage.removeItem("sb_token");
-        setToken(null); setAuthLoading(false); return;
-      }
-      setAuthUser(user);
-      // 프로필 조회 — select 문법 단순화
-      const profiles = await sb.select("profiles", `id=eq.${user.id}`, token);
-      if (profiles?.length && profiles[0].family_id) {
-        setProfile(profiles[0]);
-        loadAllData(profiles[0].family_id);
-      } else if (profiles?.length) {
-        // 프로필은 있는데 가족이 없는 경우
-        setProfile(profiles[0]);
-      }
-      setAuthLoading(false);
-    }).catch(() => { setAuthLoading(false); });
-  }, [token]);
-
-  // ── DB에서 전체 데이터 로드 ──────────────────────────────
-  const loadAllData = useCallback(async (familyId) => {
+  // ── DB 데이터 로드 (token 직접 파라미터) ─────────────────
+  const loadAllData = async (familyId, tok) => {
     try {
-      // 거래 내역 (최상위 + 하위항목)
       const txData = await sb.select("transactions",
-        `family_id=eq.${familyId}&parent_id=is.null&order=date.desc,created_at.desc`, token);
-
+        `family_id=eq.${familyId}&parent_id=is.null&order=date.desc,created_at.desc`, tok);
       const groups = (txData||[]).filter(t=>t.is_group);
       let childMap = {};
       if (groups.length > 0) {
         const children = await sb.select("transactions",
-          `parent_id=in.(${groups.map(g=>g.id).join(",")})&order=date.asc`, token);
+          `parent_id=in.(${groups.map(g=>g.id).join(",")})&order=date.asc`, tok);
         (children||[]).forEach(c=>{
           if (!childMap[c.parent_id]) childMap[c.parent_id]=[];
           childMap[c.parent_id].push(c);
         });
       }
       const txFormatted = (txData||[]).map(t=>
-        t.is_group ? { ...t, children: childMap[t.id]||[], child_count:(childMap[t.id]||[]).length } : t
+        t.is_group ? {...t, children:childMap[t.id]||[], child_count:(childMap[t.id]||[]).length} : t
       );
       if (txFormatted.length > 0) setTransactionsLocal(txFormatted);
 
-      // 정기 지출
       const recData = await sb.select("recurring_transactions",
-        `family_id=eq.${familyId}&order=day_of_month.asc`, token);
+        `family_id=eq.${familyId}&order=day_of_month.asc`, tok);
       if (recData?.length) setRecurringLocal(recData);
 
-      // 예산 (이번 달)
       const yearMonth = new Date().toISOString().slice(0,7);
       const budgetData = await sb.select("budgets",
-        `family_id=eq.${familyId}&year_month=eq.${yearMonth}`, token);
+        `family_id=eq.${familyId}&year_month=eq.${yearMonth}`, tok);
       if (budgetData?.length) {
         const b = budgetData[0];
         setBudgetsLocal({ totalEnabled:b.total_enabled, total:b.total||1500000, categories:b.categories||{} });
       }
-
-      setDbConnected(true);
     } catch(e) { console.error("데이터 로드 실패:", e); }
-  }, [token]);
+  };
 
-  // ── 거래 추가 (로컬 + DB) ───────────────────────────────
+  // ── 앱 시작 시 토큰으로 복원 (1번만) ────────────────────
+  useEffect(() => {
+    const tok = localStorage.getItem("sb_token");
+    if (!tok) { setAuthLoading(false); return; }
+    (async () => {
+      try {
+        const user = await sb.getUser(tok);
+        if (user.error || !user.id) {
+          localStorage.removeItem("sb_token");
+          setToken(null); setAuthLoading(false); return;
+        }
+        setAuthUser(user);
+        setToken(tok);
+        const profiles = await sb.select("profiles", `id=eq.${user.id}`, tok);
+        if (profiles?.length) {
+          setProfile(profiles[0]);
+          if (profiles[0].family_id) await loadAllData(profiles[0].family_id, tok);
+        }
+      } catch(e) { console.error("Auth 복원 실패:", e); }
+      setAuthLoading(false);
+    })();
+  }, []);
+
+  // ── 거래 추가 ────────────────────────────────────────────
   const addTransactions = useCallback(async (items) => {
-    // 로컬 즉시 반영
     setTransactionsLocal(prev => [...items, ...prev].sort((a,b)=>b.date.localeCompare(a.date)));
-
-    // DB 저장 — token과 profile이 있으면 항상 시도
-    const currentToken = localStorage.getItem("sb_token");
-    if (!currentToken || !profile?.family_id || !authUser?.id) {
-      console.log("DB 저장 건너뜀 — token:", !!currentToken, "familyId:", profile?.family_id, "userId:", authUser?.id);
-      return;
-    }
+    const tok = localStorage.getItem("sb_token");
+    if (!tok) return;
     try {
+      const user = await sb.getUser(tok);
+      if (!user?.id) return;
+      const profileData = await sb.select("profiles", `id=eq.${user.id}`, tok);
+      const cp = profileData?.[0];
+      if (!cp?.family_id) return;
       for (const item of items) {
         const row = {
-          family_id: profile.family_id,
-          user_id:   authUser.id,
-          type:      item.type,
-          amount:    item.amount,
-          memo:      item.memo,
-          date:      item.date,
-          category:  item.category,
-          is_group:  item.is_group || false,
+          family_id: cp.family_id, user_id: cp.id,
+          type: item.type, amount: item.amount,
+          memo: item.memo, date: item.date,
+          category: item.category, is_group: item.is_group||false,
         };
-        const inserted = await sb.insert("transactions", row, currentToken);
+        const inserted = await sb.insert("transactions", row, tok);
         const parent = Array.isArray(inserted) ? inserted[0] : inserted;
-
-        // 묶음 하위항목
         if (item.is_group && item.children?.length && parent?.id) {
           await sb.insert("transactions",
             item.children.map(c=>({
-              family_id: profile.family_id,
-              user_id:   authUser.id,
-              parent_id: parent.id,
-              type:      c.type||"expense",
-              amount:    c.amount,
-              memo:      c.memo,
-              date:      c.date||item.date,
-              category:  c.category,
-              is_group:  false,
-            })), currentToken
-          );
+              family_id: cp.family_id, user_id: cp.id,
+              parent_id: parent.id, type: c.type||"expense",
+              amount: c.amount, memo: c.memo,
+              date: c.date||item.date, category: c.category, is_group: false,
+            })), tok);
         }
       }
       console.log("✅ DB 저장 완료");
     } catch(e) { console.error("DB 저장 실패:", e); }
-  }, [profile, authUser]);
+  }, []);
 
-  // ── 거래 수정/삭제 (로컬 + DB) ─────────────────────────
   const setTransactions = useCallback((updater) => {
-    setTransactionsLocal(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      // DB 동기화는 간단히 전체 reload로 처리
-      return next;
-    });
+    setTransactionsLocal(prev => typeof updater==="function" ? updater(prev) : updater);
   }, []);
 
-  // ── 정기 지출 DB 저장 ────────────────────────────────────
-  const setRecurring = useCallback(async (updater) => {
-    setRecurringLocal(prev => {
-      const next = typeof updater === "function" ? updater(prev) : updater;
-      return next;
-    });
+  const setRecurring = useCallback((updater) => {
+    setRecurringLocal(prev => typeof updater==="function" ? updater(prev) : updater);
   }, []);
 
-  // ── 예산 저장 (로컬 + DB) ───────────────────────────────
   const setBudgets = useCallback(async (newBudgets) => {
     setBudgetsLocal(newBudgets);
-    if (!dbConnected || !profile?.family_id) return;
+    const tok = localStorage.getItem("sb_token");
+    if (!tok || !profile?.family_id) return;
     try {
       await sb.upsert("budgets", {
-        family_id:     profile.family_id,
-        year_month:    new Date().toISOString().slice(0,7),
-        total:         newBudgets.total,
-        total_enabled: newBudgets.totalEnabled,
-        categories:    newBudgets.categories,
-      }, "family_id,year_month", token);
+        family_id: profile.family_id,
+        year_month: new Date().toISOString().slice(0,7),
+        total: newBudgets.total, total_enabled: newBudgets.totalEnabled,
+        categories: newBudgets.categories,
+      }, "family_id,year_month", tok);
     } catch(e) { console.error("예산 저장 실패:", e); }
-  }, [dbConnected, profile, token]);
+  }, [profile]);
 
-  // ── 로그아웃 ─────────────────────────────────────────────
   const handleSignOut = async () => {
-    await sb.signOut(token);
+    const tok = localStorage.getItem("sb_token");
+    if (tok) await sb.signOut(tok);
     localStorage.removeItem("sb_token");
     setToken(null); setAuthUser(null); setProfile(null);
-    setDbConnected(false);
     setTransactionsLocal(INIT_TRANSACTIONS);
   };
 
-  // ── 테스트 모드: Auth 우회 ─────────────────────────────────
-  const TEST_MODE = false; // 실제 배포 버전
+  const TEST_MODE = false;
 
-  // ── 로딩 ─────────────────────────────────────────────────
-  if (authLoading && !TEST_MODE) return (
+  if (authLoading) return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
       <div style={{ fontSize:40 }}>🏡</div>
       <div style={{ width:32, height:32, border:`3px solid ${C.border}`, borderTopColor:C.accent, borderRadius:"50%", animation:"spin 0.8s linear infinite" }} />
@@ -3063,49 +3028,36 @@ export default function App() {
     </div>
   );
 
-  // ── 미로그인 ──────────────────────────────────────────────
   if (!TEST_MODE && (!token || !authUser)) return (
     <AuthScreen onAuth={(tok, user) => {
+      localStorage.setItem("sb_token", tok);
       setToken(tok); setAuthUser(user);
     }} />
   );
 
-  // ── 가족 없음 ────────────────────────────────────────────
   if (!TEST_MODE && !profile?.family_id) return (
     <FamilySetupScreen
       token={token}
       userId={authUser?.id}
       onSetup={async (familyId) => {
-        // 프로필 재조회로 확실하게 반영
-        const profiles = await sb.select("profiles", `id=eq.${authUser.id}`, token);
-        if (profiles?.length) {
-          setProfile(profiles[0]);
-        } else {
-          setProfile(p => ({ ...p, family_id: familyId }));
-        }
-        loadAllData(familyId);
+        const tok = localStorage.getItem("sb_token");
+        const profiles = await sb.select("profiles", `id=eq.${authUser.id}`, tok);
+        if (profiles?.length) setProfile(profiles[0]);
+        else setProfile(p => ({...p, family_id: familyId}));
+        await loadAllData(familyId, tok);
       }}
     />
   );
 
-  // ── DB 연결 상태 표시 ────────────────────────────────────
   const ctx = {
     transactions, setTransactions, recurring, setRecurring,
     addTransactions, activeTab, setActiveTab,
-    budgets, setBudgets,
-    token, profile, authUser, dbConnected,
-    handleSignOut,
+    budgets, setBudgets, token, profile, authUser, handleSignOut,
   };
 
   return (
     <AppContext.Provider value={ctx}>
       <div style={{ maxWidth:430, margin:"0 auto", minHeight:"100vh", background:C.bg, fontFamily:"'Pretendard','Apple SD Gothic Neo',sans-serif", overflowX:"hidden" }}>
-        {/* DB 연결 상태 배너 */}
-        {!dbConnected && (
-          <div style={{ background:"#E67E22", padding:"6px 16px", textAlign:"center" }}>
-            <span style={{ color:"#fff", fontSize:11 }}>⚠️ 오프라인 모드 — 데이터가 로컬에만 저장됩니다</span>
-          </div>
-        )}
         <div style={{ minHeight:"calc(100vh - 70px)", overflowY:"auto" }}>
           {activeTab==="home"         && <HomeScreen />}
           {activeTab==="transactions" && <TransactionsScreen />}
@@ -3113,8 +3065,6 @@ export default function App() {
           {activeTab==="stats"        && <StatsScreen />}
           {activeTab==="settings"     && <SettingsScreen />}
         </div>
-
-        {/* 탭 바 */}
         <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, background:"rgba(245,246,250,0.95)", backdropFilter:"blur(16px)", borderTop:`1px solid ${C.border}`, zIndex:100 }}>
           {activeTab==="stats" && (
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"5px 0 2px", borderBottom:`1px solid ${C.border}` }}>
@@ -3141,3 +3091,4 @@ export default function App() {
     </AppContext.Provider>
   );
 }
+
