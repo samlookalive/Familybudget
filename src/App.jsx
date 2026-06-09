@@ -2891,8 +2891,12 @@ export default function App() {
     // 로컬 즉시 반영
     setTransactionsLocal(prev => [...items, ...prev].sort((a,b)=>b.date.localeCompare(a.date)));
 
-    // DB 저장
-    if (!dbConnected || !profile?.family_id) return;
+    // DB 저장 — token과 profile이 있으면 항상 시도
+    const currentToken = localStorage.getItem("sb_token");
+    if (!currentToken || !profile?.family_id || !authUser?.id) {
+      console.log("DB 저장 건너뜀 — token:", !!currentToken, "familyId:", profile?.family_id, "userId:", authUser?.id);
+      return;
+    }
     try {
       for (const item of items) {
         const row = {
@@ -2905,7 +2909,7 @@ export default function App() {
           category:  item.category,
           is_group:  item.is_group || false,
         };
-        const inserted = await sb.insert("transactions", row, token);
+        const inserted = await sb.insert("transactions", row, currentToken);
         const parent = Array.isArray(inserted) ? inserted[0] : inserted;
 
         // 묶음 하위항목
@@ -2921,12 +2925,13 @@ export default function App() {
               date:      c.date||item.date,
               category:  c.category,
               is_group:  false,
-            })), token
+            })), currentToken
           );
         }
       }
+      console.log("✅ DB 저장 완료");
     } catch(e) { console.error("DB 저장 실패:", e); }
-  }, [dbConnected, profile, authUser, token]);
+  }, [profile, authUser]);
 
   // ── 거래 수정/삭제 (로컬 + DB) ─────────────────────────
   const setTransactions = useCallback((updater) => {
