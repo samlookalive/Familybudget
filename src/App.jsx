@@ -773,10 +773,10 @@ function TransactionsScreen() {
 
       {/* 월 요약 */}
       <div style={{ margin:"0 16px 16px", background:C.surface, borderRadius:12, padding:"12px 16px", border:`1px solid ${C.border}`, display:"flex", justifyContent:"space-around" }}>
-        {[{label:"수입",val:summary.income,color:C.income,sign:"+"},{label:"지출",val:summary.expense,color:C.expense,sign:"-"},{label:"잔액",val:summary.balance,color:C.text,sign:""}].map(s=>(
+        {[{label:"수입",val:summary.income,color:C.income},{label:"지출",val:summary.expense,color:C.expense},{label:"잔액",val:summary.balance,color:summary.balance>=0?C.income:C.expense}].map(s=>(
           <div key={s.label} style={{ textAlign:"center" }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 3px" }}>{s.label}</p>
-            <p style={{ color:s.color, fontSize:14, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{s.sign}{fmt(s.val)}</p>
+            <p style={{ color:s.color, fontSize:14, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(s.val)}</p>
           </div>
         ))}
       </div>
@@ -1254,7 +1254,7 @@ function InputScreen() {
                           <p style={{color:C.textMuted,fontSize:10,margin:0}}>{item.date} · {item.category}</p>
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                          <span style={{color:item.type==="income"?C.income:C.expense,fontSize:13,fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{item.type==="income"?"+":"-"}{fmt(item.amount)}원</span>
+                          <span style={{color:item.type==="income"?C.income:C.expense,fontSize:13,fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{fmt(item.amount)}원</span>
                           <span style={{color:isEO?C.accent:C.textMuted,fontSize:11,border:`1px solid ${isEO?C.accent:C.border}`,borderRadius:6,padding:"2px 7px",background:isEO?C.accentSoft:"transparent"}}>{isEO?"닫기":"수정"}</span>
                         </div>
                       </div>
@@ -2140,7 +2140,7 @@ function SettingsScreen() {
             </div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            {item.amount_type==="fixed" ? <span style={{ color:C.expense, fontSize:14, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>-{fmt(item.amount)}원</span> : <span style={{ color:C.textMuted, fontSize:13 }}>변동</span>}
+            {item.amount_type==="fixed" ? <span style={{ color:C.expense, fontSize:14, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{fmt(item.amount)}원</span> : <span style={{ color:C.textMuted, fontSize:13 }}>변동</span>}
             <span style={{ color:C.textMuted, fontSize:16, transition:"transform 0.2s", display:"inline-block", transform:isExp?"rotate(90deg)":"rotate(0deg)" }}>›</span>
           </div>
         </div>
@@ -2331,7 +2331,7 @@ function SettingsScreen() {
               <div>
                 <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px", letterSpacing:1, textTransform:"uppercase" }}>이달 고정 합계</p>
                 <p style={{ color:C.accent, fontSize:11, margin:"0 0 8px" }}>{monthLabel} 기준</p>
-                <p style={{ color:C.expense, fontSize:26, fontWeight:800, margin:0, fontFamily:"'DM Mono',monospace" }}>-{fmt(totalFixed)}<span style={{ fontSize:14, fontWeight:400, color:C.textMuted, marginLeft:4 }}>원</span></p>
+                <p style={{ color:C.expense, fontSize:26, fontWeight:800, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(totalFixed)}<span style={{ fontSize:14, fontWeight:400, color:C.textMuted, marginLeft:4 }}>원</span></p>
               </div>
               <button onClick={()=>setShowAdd(true)} style={{ padding:"8px 14px", borderRadius:10, border:"none", background:C.accentSoft, color:C.accent, fontSize:13, fontWeight:600, cursor:"pointer" }}>+ 추가</button>
             </div>
@@ -2442,7 +2442,7 @@ function SettingsScreen() {
           <FamilyInfoCard />
           <div style={{ background:C.surface, borderRadius:16, border:"1px solid "+C.border, padding:"16px", marginTop:8 }}>
             <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>앱 정보</p>
-            {[{label:"앱 버전",value:"v1.2.3",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
+            {[{label:"앱 버전",value:"v1.2.4",accent:true},{label:"서비스",value:"우리집 가계부"},{label:"문의",value:"가족 내 공유용"}].map((row,i,arr)=>(
               <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom:i<arr.length-1?"1px solid "+C.border:"none" }}>
                 <span style={{ color:C.text, fontSize:14 }}>{row.label}</span>
                 <span style={{ color:row.accent?C.accent:C.textMuted, fontSize:14, fontWeight:row.accent?700:400 }}>{row.value}</span>
