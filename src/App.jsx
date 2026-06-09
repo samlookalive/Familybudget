@@ -2600,7 +2600,19 @@ function AuthScreen({ onAuth }) {
     try {
       if (mode === "login") {
         const res = await sb.signIn(email, password);
-        if (res.error) throw new Error(res.error.message || "로그인 실패");
+        if (res.error) {
+          if (res.error.message?.includes("Invalid login credentials") ||
+              res.error.message?.includes("invalid_credentials")) {
+            throw new Error("이메일 또는 비밀번호가 올바르지 않아요");
+          }
+          if (res.error.message?.includes("Email not confirmed")) {
+            throw new Error("이메일 인증이 완료되지 않았어요. 받은 편지함을 확인해주세요");
+          }
+          if (res.error.message?.includes("Too many requests")) {
+            throw new Error("잠시 후 다시 시도해주세요");
+          }
+          throw new Error(res.error.message || "로그인 실패");
+        }
         localStorage.setItem("sb_token", res.access_token);
         onAuth(res.access_token, res.user);
       } else {
@@ -2708,12 +2720,26 @@ function FamilySetupScreen({ token, userId, onSetup }) {
     if (!familyName.trim()) return;
     setError(""); setLoading(true);
     try {
+      // 1) 가족 생성
       const families = await sb.insert("families", { name: familyName }, token);
       const family = Array.isArray(families) ? families[0] : families;
-      if (!family?.id) throw new Error("가족 생성 실패");
-      await sb.insert("profiles", { id: userId, family_id: family.id, name: familyName, role: "owner" }, token);
-      await sb.rpc("seed_default_categories", { p_family_id: family.id }, token);
-      onSetup(family.id);
+
+      // RLS로 인해 insert 후 빈 배열이 올 수 있음 — families 테이블 다시 조회
+      let familyId = family?.id;
+      if (!familyId) {
+        // 방금 만든 가족을 이름으로 다시 찾기
+        const found = await sb.select("families", `name=eq.${encodeURIComponent(familyName)}&order=created_at.desc&limit=1`, token);
+        familyId = Array.isArray(found) ? found[0]?.id : found?.id;
+      }
+      if (!familyId) throw new Error("가족 생성에 실패했어요. 잠시 후 다시 시도해주세요");
+
+      // 2) 프로필 생성
+      await sb.insert("profiles", { id: userId, family_id: familyId, name: familyName, role: "owner" }, token);
+
+      // 3) 기본 카테고리 시드
+      await sb.rpc("seed_default_categories", { p_family_id: familyId }, token);
+
+      onSetup(familyId);
     } catch(e) { setError(e.message); }
     setLoading(false);
   };
