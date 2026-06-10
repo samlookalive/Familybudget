@@ -1,122 +1,141 @@
 import React, { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.5.7";
+const APP_VERSION = "1.3.9";
 
 // ══════════════════════════════════════════════════════════════
-// Supabase 클라이언트 (SDK)
+// Supabase 클라이언트
 // ══════════════════════════════════════════════════════════════
 const SUPABASE_URL      = "https://pzuoyfqghouuvjwjqmwt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6dW95ZnFnaG91dXZqd2pxbXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNDMwODUsImV4cCI6MjA5NjYxOTA4NX0.smTYOByqSCGorBi8PseDOegvysCgUukl7yHlupORVxY";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  }
-});
 
-// 세션 설정 헬퍼 - 토큰이 있을 때만 세션 설정
-const setSupabaseSession = async (token, refreshToken="") => {
-  if (token) {
-    await supabase.auth.setSession({ access_token: token, refresh_token: refreshToken });
-  }
-};
 
-// sb 헬퍼 - SDK 래퍼
+// Supabase REST API 헬퍼
 const sb = {
+  url: SUPABASE_URL,
+  key: SUPABASE_ANON_KEY,
+  headers: (extra={}) => ({
+    "Content-Type": "application/json",
+    "apikey": SUPABASE_ANON_KEY,
+    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+    ...extra,
+  }),
+  authHeaders: (token, extra={}) => ({
+    "Content-Type": "application/json",
+    "apikey": SUPABASE_ANON_KEY,
+    "Authorization": `Bearer ${token}`,
+    ...extra,
+  }),
+
+  async from(table) { return `${SUPABASE_URL}/rest/v1/${table}`; },
+
   async select(table, query="", token=null) {
-    await setSupabaseSession(token);
-    let req = supabase.from(table).select("*");
-    if (query) {
-      query.split("&").forEach(part => {
-        if (!part) return;
-        const eqMatch = part.match(/^(.+)=eq\.(.+)$/);
-        const orderMatch = part.match(/^order=(.+)\.(.+)$/);
-        const limitMatch = part.match(/^limit=(\d+)$/);
-        const inMatch = part.match(/^(.+)=in\.\((.+)\)$/);
-        const isMatch = part.match(/^(.+)=is\.(.+)$/);
-        if (eqMatch) req = req.eq(eqMatch[1], eqMatch[2]);
-        else if (orderMatch) req = req.order(orderMatch[1], { ascending: orderMatch[2] !== "desc" });
-        else if (limitMatch) req = req.limit(parseInt(limitMatch[1]));
-        else if (inMatch) req = req.in(inMatch[1], inMatch[2].split(","));
-        else if (isMatch) req = isMatch[2] === "null" ? req.is(isMatch[1], null) : req.not(isMatch[1], "is", null);
-      });
-    }
-    const { data, error } = await req;
-    if (error) throw new Error(error.message);
-    return data || [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+      headers: token ? sb.authHeaders(token) : sb.headers(),
+    });
+    const text = await res.text();
+    if (!text) return [];
+    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
   },
 
   async insert(table, data, token) {
-    await setSupabaseSession(token);
-    const { data: result, error } = await supabase.from(table).insert(data).select();
-    if (error) throw new Error(error.message);
-    return result || [];
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+      method: "POST",
+      headers: sb.authHeaders(token, { "Prefer": "return=representation" }),
+      body: JSON.stringify(data),
+    });
+    const text = await res.text();
+    if (!text) return [];
+    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
   },
 
   async update(table, data, match, token) {
-    await setSupabaseSession(token);
-    let req = supabase.from(table).update(data);
-    Object.entries(match).forEach(([k,v]) => { req = req.eq(k, v); });
-    const { data: result, error } = await req.select();
-    if (error) throw new Error(error.message);
-    return result || [];
+    const q = Object.entries(match).map(([k,v])=>`${k}=eq.${v}`).join("&");
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, {
+      method: "PATCH",
+      headers: sb.authHeaders(token, { "Prefer": "return=representation" }),
+      body: JSON.stringify(data),
+    });
+    const text = await res.text();
+    if (!text) return [];
+    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
   },
 
   async delete(table, match, token) {
-    await setSupabaseSession(token);
-    let req = supabase.from(table).delete();
-    Object.entries(match).forEach(([k,v]) => { req = req.eq(k, v); });
-    const { error } = await req;
-    if (error) throw new Error(error.message);
+    const q = Object.entries(match).map(([k,v])=>`${k}=eq.${v}`).join("&");
+    await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, {
+      method: "DELETE",
+      headers: sb.authHeaders(token),
+    });
   },
 
   async upsert(table, data, onConflict, token) {
-    await setSupabaseSession(token);
-    const { data: result, error } = await supabase.from(table).upsert(data, { onConflict }).select();
-    if (error) throw new Error(error.message);
-    return result || [];
-  },
-
-  async rpc(fn, params, token) {
-    await setSupabaseSession(token);
-    const { data, error } = await supabase.rpc(fn, params);
-    if (error) throw new Error(error.message);
-    return data;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+      method: "POST",
+      headers: sb.authHeaders(token, { "Prefer": "return=representation,resolution=merge-duplicates" }),
+      body: JSON.stringify(data),
+    });
+    const text = await res.text();
+    if (!text) return [];
+    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
   },
 
   // Auth
   async signUp(email, password) {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error };
-    return { user: data.user, access_token: data.session?.access_token, refresh_token: data.session?.refresh_token };
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+      method: "POST",
+      headers: sb.headers(),
+      body: JSON.stringify({ email, password }),
+    });
+    return res.json();
   },
 
   async signIn(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error };
-    return { user: data.user, access_token: data.session?.access_token, refresh_token: data.session?.refresh_token };
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: sb.headers(),
+      body: JSON.stringify({ email, password }),
+    });
+    const text = await res.text();
+    return text ? JSON.parse(text) : {};
   },
 
   async refreshToken(refreshTok) {
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshTok });
-    if (error) return { error };
-    return { access_token: data.session?.access_token, refresh_token: data.session?.refresh_token };
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: sb.headers(),
+      body: JSON.stringify({ refresh_token: refreshTok }),
+    });
+    const text = await res.text();
+    return text ? JSON.parse(text) : {};
   },
 
   async signOut(token) {
-    await setSupabaseSession(token);
-    await supabase.auth.signOut();
+    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+      method: "POST",
+      headers: sb.authHeaders(token),
+    });
   },
 
   async getUser(token) {
-    await setSupabaseSession(token);
-    const { data, error } = await supabase.auth.getUser();
-    if (error) return { error };
-    return data.user;
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: sb.authHeaders(token),
+    });
+    return res.json();
+  },
+
+  // RPC 호출
+  async rpc(fn, params, token) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: "POST",
+      headers: token ? sb.authHeaders(token) : sb.headers(),
+      body: JSON.stringify(params),
+    });
+    const text = await res.text();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch(e) { return null; }
   },
 };
 
@@ -2632,16 +2651,12 @@ function FamilyInfoCard() {
       await sb.delete("recurring_transactions", { family_id: fid }, token);
       // 3) 예산 삭제
       await sb.delete("budgets", { family_id: fid }, token);
-      // 4) 카테고리 하위 먼저 삭제
-      const allCats = await sb.select("categories", `family_id=eq.${fid}`, token);
-      const childCats = (allCats||[]).filter(c=>c.parent_id);
-      const parentCats = (allCats||[]).filter(c=>!c.parent_id);
-      for (const c of childCats) await sb.delete("categories", { id: c.id }, token);
-      for (const c of parentCats) await sb.delete("categories", { id: c.id }, token);
-      // 5) 가족 삭제 (profiles null 처리 전에 먼저!)
+      // 4) 카테고리 삭제
+      await sb.delete("categories", { family_id: fid }, token);
+      // 5) 프로필 family_id null (모든 멤버)
+      await sb.update("profiles", { family_id: null }, { family_id: fid }, token);
+      // 6) 가족 삭제 (id로)
       await sb.delete("families", { id: fid }, token);
-      // 6) 프로필 family_id null - id로 직접 지정
-      await sb.update("profiles", { family_id: null }, { id: profile.id }, token);
 
       setProfile(p => ({ ...p, family_id: null }));
       setTransactions([]);
@@ -2767,8 +2782,14 @@ function AuthScreen({ onAuth }) {
         if (res.error) {
           const msg = res.error.message || "";
           if (msg.includes("Invalid login") || msg.includes("invalid_credentials")) {
-            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
-            if (resetError?.message?.includes("User not found") || resetError?.status === 422 || resetError?.status === 400) {
+            // 비밀번호 찾기 이메일 발송으로 이메일 존재 여부 확인
+            const resetRes = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
+              body: JSON.stringify({ email }),
+            });
+            // 이메일이 없으면 422, 있으면 200
+            if (resetRes.status === 422 || resetRes.status === 400) {
               throw new Error("가입되지 않은 이메일이에요. 회원가입을 먼저 해주세요");
             } else {
               throw new Error("비밀번호가 틀렸어요");
@@ -2784,7 +2805,6 @@ function AuthScreen({ onAuth }) {
         if (res.refresh_token) localStorage.setItem("sb_refresh_token", res.refresh_token);
         if (rememberEmail) localStorage.setItem("sb_saved_email", email);
         else localStorage.removeItem("sb_saved_email");
-        if (!res.user?.id) throw new Error("로그인 정보를 불러오지 못했어요. 다시 시도해주세요");
         onAuth(res.access_token, res.user, res.refresh_token);
       } else {
         const res = await sb.signUp(email, password);
@@ -2822,7 +2842,8 @@ function AuthScreen({ onAuth }) {
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px" }}>
-      <div style={{ width:"100%", maxWidth:380 }}>        <div style={{ textAlign:"center", marginBottom:36 }}>
+      <div style={{ width:"100%", maxWidth:380 }}>
+        <div style={{ textAlign:"center", marginBottom:36 }}>
           <div style={{ fontSize:52, marginBottom:12 }}>🏡</div>
           <h1 style={{ color:C.text, fontSize:26, fontWeight:800, margin:"0 0 6px" }}>우리집 가계부</h1>
           <p style={{ color:C.textMuted, fontSize:14, margin:0 }}>부부가 함께 쓰는 스마트 가계부</p>
@@ -2868,14 +2889,13 @@ function AuthScreen({ onAuth }) {
           style={{ width:"100%", padding:"15px", borderRadius:12, border:"none", background:loading?C.border:C.accent, color:"#fff", fontSize:16, fontWeight:700, cursor:loading?"default":"pointer" }}>
           {loading?"처리 중...":mode==="login"?"로그인":"회원가입"}
         </button>
-        <p style={{ color:C.textMuted, fontSize:11, textAlign:"center", marginTop:24 }}>v{APP_VERSION}</p>
       </div>
     </div>
   );
 }
 
 // ── 가족 설정 화면 ────────────────────────────────────────────
-function FamilySetupScreen({ userId, onSetup, onSignOut }) {
+function FamilySetupScreen({ token, userId, onSetup, onSignOut }) {
   const [mode,       setMode]       = useState("choose");
   const [familyName, setFamilyName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -2884,8 +2904,6 @@ function FamilySetupScreen({ userId, onSetup, onSignOut }) {
 
   const handleCreate = async () => {
     if (!familyName.trim()) return;
-    const token = localStorage.getItem("sb_token"); // 클릭 시점에 최신 토큰 읽기
-    if (!token) { setError("로그인이 필요해요"); return; }
     setError(""); setLoading(true);
     try {
       // 1) 가족 생성
@@ -2918,8 +2936,6 @@ function FamilySetupScreen({ userId, onSetup, onSignOut }) {
 
   const handleJoin = async () => {
     if (inviteCode.length !== 6) return;
-    const token = localStorage.getItem("sb_token"); // 클릭 시점에 최신 토큰 읽기
-    if (!token) { setError("로그인이 필요해요"); return; }
     setError(""); setLoading(true);
     try {
       const families = await sb.select("families", `invite_code=eq.${inviteCode.toUpperCase()}`, token);
@@ -3069,9 +3085,7 @@ export default function App() {
             }
           } else {
             localStorage.removeItem("sb_token");
-            setAuthLoading(false);
-            setProfileLoading(false);
-            return;
+            setAuthLoading(false); return;
           }
         }
         setToken(tok);
@@ -3188,7 +3202,6 @@ export default function App() {
   // ── 미로그인 ──────────────────────────────────────────────
   if (!token) return (
     <AuthScreen onAuth={async (tok, user, refreshTok) => {
-      if (!tok || !user?.id) return; // 방어코드
       localStorage.setItem("sb_token", tok);
       if (refreshTok) localStorage.setItem("sb_refresh_token", refreshTok);
       setToken(tok); setAuthUser(user);
@@ -3217,6 +3230,7 @@ export default function App() {
   // ── 가족 없음 ─────────────────────────────────────────────
   if (!profile?.family_id) return (
     <FamilySetupScreen
+      token={token}
       userId={profile?.id || authUser?.id}
       onSignOut={handleSignOut}
       onSetup={async (familyId) => {
@@ -3272,4 +3286,3 @@ export default function App() {
     </AppContext.Provider>
   );
 }
-
