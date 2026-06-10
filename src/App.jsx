@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.4.2";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -2897,7 +2897,8 @@ function AuthScreen({ onAuth }) {
 }
 
 // ── 가족 설정 화면 ────────────────────────────────────────────
-function FamilySetupScreen({ token, userId, onSetup, onSignOut }) {
+function FamilySetupScreen({ userId, onSetup, onSignOut }) {
+  const token = localStorage.getItem("sb_token"); // 항상 최신 토큰 사용
   const [mode,       setMode]       = useState("choose");
   const [familyName, setFamilyName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -3232,7 +3233,6 @@ export default function App() {
   // ── 가족 없음 ─────────────────────────────────────────────
   if (!profile?.family_id) return (
     <FamilySetupScreen
-      token={token}
       userId={profile?.id || authUser?.id}
       onSignOut={handleSignOut}
       onSetup={async (familyId) => {
