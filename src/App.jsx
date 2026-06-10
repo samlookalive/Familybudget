@@ -2,13 +2,13 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.4.4";
+const APP_VERSION = "1.4.5";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
 // ══════════════════════════════════════════════════════════════
 const SUPABASE_URL      = "https://cbdgfzbshurlbnpcmqbk.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_Hs4AdLsIf_gWcnvBNOQChA_NSJA0k9o";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiZGdmemJzaHVybGJucGNtcWJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NTQwODUsImV4cCI6MjA5NjUzMDA4NX0.dOMQKUCP43oaAtS4akGOibgwdGTwkeBFe5CGmjROgLo";
 
 // Supabase REST API 헬퍼
 const sb = {
