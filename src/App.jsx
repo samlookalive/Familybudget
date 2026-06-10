@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.6.4";
+const APP_VERSION = "1.6.6";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -116,24 +116,32 @@ const useApp = () => useContext(AppContext);
 
 // ── 카테고리 메타 ─────────────────────────────────────────────
 const CATEGORIES = {
-  "cat-fixed":    { name:"고정비",     icon:"📌", color:"#6C8EBF" },
-  "cat-variable": { name:"변동비",     icon:"🔄", color:"#E8834A" },
-  식비:            { name:"식비",       icon:"🍚", color:"#E8834A" },
-  교통:            { name:"교통",       icon:"🚌", color:"#E8834A" },
-  쇼핑:            { name:"쇼핑",       icon:"🛍️",color:"#E8834A" },
-  "의료/건강":     { name:"의료/건강",  icon:"💊", color:"#E8834A" },
-  "생활/마트":     { name:"생활/마트",  icon:"🏪", color:"#E8834A" },
-  "문화/여가":     { name:"문화/여가",  icon:"🎬", color:"#E8834A" },
-  여행:            { name:"여행",       icon:"✈️", color:"#E8834A" },
-  월세:            { name:"월세/관리비",icon:"🏠", color:"#6C8EBF" },
-  보험:            { name:"보험",       icon:"🛡️", color:"#6C8EBF" },
-  구독:            { name:"구독서비스", icon:"📱", color:"#6C8EBF" },
-  월급:            { name:"월급",       icon:"💴", color:"#4CAF82" },
+  "고정비":       { name:"고정비",     icon:"📌", color:"#6C8EBF" },
+  "변동비":       { name:"변동비",     icon:"🔄", color:"#E8834A" },
+  "수입":         { name:"수입",       icon:"💰", color:"#4CAF82" },
+  "식비":         { name:"식비",       icon:"🍚", color:"#E8834A" },
+  "교통":         { name:"교통",       icon:"🚌", color:"#E8834A" },
+  "쇼핑":         { name:"쇼핑",       icon:"🛍️",color:"#E8834A" },
+  "의료/건강":    { name:"의료/건강",  icon:"💊", color:"#E8834A" },
+  "생활/마트":    { name:"생활/마트",  icon:"🏪", color:"#E8834A" },
+  "문화/여가":    { name:"문화/여가",  icon:"🎬", color:"#E8834A" },
+  "여행":         { name:"여행",       icon:"✈️", color:"#E8834A" },
+  "기타":         { name:"기타",       icon:"📦", color:"#9CA3AF" },
+  "월세/관리비":  { name:"월세/관리비",icon:"🏠", color:"#6C8EBF" },
+  "보험":         { name:"보험",       icon:"🛡️", color:"#6C8EBF" },
+  "구독서비스":   { name:"구독서비스", icon:"📱", color:"#6C8EBF" },
+  "통신비":       { name:"통신비",     icon:"📡", color:"#6C8EBF" },
+  "교육":         { name:"교육",       icon:"📚", color:"#6C8EBF" },
+  "월급":         { name:"월급",       icon:"💴", color:"#4CAF82" },
+  "부수입":       { name:"부수입",     icon:"📈", color:"#4CAF82" },
+  "용돈":         { name:"용돈",       icon:"🎁", color:"#4CAF82" },
+  "기타수입":     { name:"기타수입",   icon:"💡", color:"#4CAF82" },
 };
 
 const CAT_ICON_MAP = {
   식비:"🍚", 교통:"🚌", 쇼핑:"🛍️", "의료/건강":"💊", "생활/마트":"🏪",
-  "문화/여가":"🎬", 여행:"✈️", "월세/관리비":"🏠", 구독서비스:"📱", 월급:"💴", 기타:"📦",
+  "문화/여가":"🎬", 여행:"✈️", "월세/관리비":"🏠", "구독서비스":"📱",
+  통신비:"📡", 교육:"📚", 월급:"💴", 부수입:"📈", 용돈:"🎁", 기타수입:"💡", 기타:"📦",
 };
 
 // ── 초기 더미 거래 내역 ───────────────────────────────────────
@@ -2579,8 +2587,9 @@ function FamilyInfoCard() {
   const [family,  setFamily]  = useState(null);
   const [copied,  setCopied]  = useState(false);
   const [loading, setLoading] = useState(true);
-  const [confirm, setConfirm] = useState(null); // null | "leave" | "delete"
+  const [confirm, setConfirm] = useState(null); // null | "leave"
   const [working, setWorking] = useState(false);
+  const [leaveCode, setLeaveCode] = useState("");
 
   useEffect(() => {
     if (!profile?.family_id || !token) { setLoading(false); return; }
@@ -2700,13 +2709,21 @@ function FamilyInfoCard() {
                 나만 가족에서 나가요. 다른 가족의 데이터는 유지됩니다.
               </p>
             </div>
+            <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 6px" }}>가족 초대코드를 입력해야 탈퇴할 수 있어요</p>
+            <input
+              value={leaveCode}
+              onChange={e=>setLeaveCode(e.target.value.toUpperCase())}
+              placeholder="초대코드 6자리"
+              maxLength={6}
+              style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", color:C.text, fontSize:15, boxSizing:"border-box", marginBottom:16, textAlign:"center", letterSpacing:4 }}
+            />
             <div style={{ display:"flex", gap:10 }}>
-              <button onClick={()=>setConfirm(null)} disabled={working}
+              <button onClick={()=>{ setConfirm(null); setLeaveCode(""); }} disabled={working}
                 style={{ flex:1, padding:"13px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer", fontWeight:600 }}>
                 취소
               </button>
-              <button onClick={handleLeave} disabled={working}
-                style={{ flex:1, padding:"13px", borderRadius:12, border:"none", background:C.expense, color:"#fff", fontSize:14, cursor:"pointer", fontWeight:700 }}>
+              <button onClick={handleLeave} disabled={working || leaveCode !== family?.invite_code}
+                style={{ flex:1, padding:"13px", borderRadius:12, border:"none", background:leaveCode===family?.invite_code?C.expense:C.border, color:"#fff", fontSize:14, cursor:leaveCode===family?.invite_code?"pointer":"default", fontWeight:700 }}>
                 {working ? "처리 중..." : "탈퇴"}
               </button>
             </div>
