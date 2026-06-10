@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.5.3";
+const APP_VERSION = "1.5.4";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -22,15 +22,13 @@ const sb = {
   }),
   authHeaders: (token, extra={}) => ({
     "Content-Type": "application/json",
-    "apikey": SUPABASE_ANON_KEY,
     "Authorization": `Bearer ${token}`,
     ...extra,
   }),
 
   // apikey를 URL 쿼리파라미터로 추가
   apiUrl: (path, query="") => {
-    const sep = query ? "&" : "";
-    return `${SUPABASE_URL}${path}?${query}${sep}apikey=${SUPABASE_ANON_KEY}`;
+    return `${SUPABASE_URL}${path}${query ? "?"+query : ""}`;
   },
 
   async from(table) { return `${SUPABASE_URL}/rest/v1/${table}`; },
