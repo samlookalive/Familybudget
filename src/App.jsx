@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.5.2";
+const APP_VERSION = "1.5.3";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -27,10 +27,16 @@ const sb = {
     ...extra,
   }),
 
+  // apikey를 URL 쿼리파라미터로 추가
+  apiUrl: (path, query="") => {
+    const sep = query ? "&" : "";
+    return `${SUPABASE_URL}${path}?${query}${sep}apikey=${SUPABASE_ANON_KEY}`;
+  },
+
   async from(table) { return `${SUPABASE_URL}/rest/v1/${table}`; },
 
   async select(table, query="", token=null) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    const res = await fetch(sb.apiUrl(`/rest/v1/${table}`, query), {
       headers: token ? sb.authHeaders(token) : sb.headers(),
     });
     const text = await res.text();
@@ -39,7 +45,7 @@ const sb = {
   },
 
   async insert(table, data, token) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    const res = await fetch(sb.apiUrl(`/rest/v1/${table}`), {
       method: "POST",
       headers: sb.authHeaders(token, { "Prefer": "return=representation" }),
       body: JSON.stringify(data),
@@ -51,7 +57,7 @@ const sb = {
 
   async update(table, data, match, token) {
     const q = Object.entries(match).map(([k,v])=>`${k}=eq.${v}`).join("&");
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, {
+    const res = await fetch(sb.apiUrl(`/rest/v1/${table}`, q), {
       method: "PATCH",
       headers: sb.authHeaders(token, { "Prefer": "return=representation" }),
       body: JSON.stringify(data),
@@ -63,14 +69,14 @@ const sb = {
 
   async delete(table, match, token) {
     const q = Object.entries(match).map(([k,v])=>`${k}=eq.${v}`).join("&");
-    await fetch(`${SUPABASE_URL}/rest/v1/${table}?${q}`, {
+    await fetch(sb.apiUrl(`/rest/v1/${table}`, q), {
       method: "DELETE",
       headers: sb.authHeaders(token),
     });
   },
 
   async upsert(table, data, onConflict, token) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${onConflict}`, {
+    const res = await fetch(sb.apiUrl(`/rest/v1/${table}`, `on_conflict=${onConflict}`), {
       method: "POST",
       headers: sb.authHeaders(token, { "Prefer": "return=representation,resolution=merge-duplicates" }),
       body: JSON.stringify(data),
@@ -126,7 +132,7 @@ const sb = {
 
   // RPC 호출
   async rpc(fn, params, token) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    const res = await fetch(sb.apiUrl(`/rest/v1/rpc/${fn}`), {
       method: "POST",
       headers: token ? sb.authHeaders(token) : sb.headers(),
       body: JSON.stringify(params),
