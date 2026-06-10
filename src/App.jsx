@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.6.2";
+const APP_VERSION = "1.6.4";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -675,7 +675,7 @@ function TransactionsScreen() {
   };
 
   return (
-    <div style={{ paddingBottom:80 }}>
+    <div style={{ paddingBottom:110 }}>
       {/* 삭제 확인 모달 */}
       {deleteTarget && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 24px" }}>
@@ -1618,7 +1618,7 @@ function StatsScreen() {
   const toggleCat = (n) => setSelectedCats(p=>p.includes(n)?p.filter(c=>c!==n):[...p,n]);
 
   return (
-    <div style={{ paddingBottom:80 }}>
+    <div style={{ paddingBottom:110 }}>
       <div style={{ padding:"28px 20px 16px" }}>
         <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}></p>
         <h2 style={{ color:C.text, fontSize:20, margin:"4px 0 0", fontWeight:700 }}>통계</h2>
@@ -2170,7 +2170,7 @@ function SettingsScreen() {
   };
 
   return (
-    <div style={{ paddingBottom:80 }}>
+    <div style={{ paddingBottom:110 }}>
       {/* 헤더 */}
       <div style={{ padding:"28px 20px 0" }}>
         <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}>관리</p>
@@ -2686,10 +2686,6 @@ function FamilyInfoCard() {
             style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
             가족 탈퇴
           </button>
-          <button onClick={()=>setConfirm("delete")}
-            style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${C.expense}44`, background:"transparent", color:C.expense, fontSize:12, fontWeight:600, cursor:"pointer" }}>
-            가족 해체
-          </button>
         </div>
       </div>
 
@@ -2698,14 +2694,10 @@ function FamilyInfoCard() {
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 24px" }}>
           <div style={{ background:C.surface, borderRadius:20, padding:"24px", width:"100%", maxWidth:380, border:`1px solid ${C.border}` }}>
             <div style={{ textAlign:"center", marginBottom:20 }}>
-              <div style={{ fontSize:44, marginBottom:12 }}>{confirm==="leave"?"🚪":"💥"}</div>
-              <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:"0 0 8px" }}>
-                {confirm==="leave" ? "가족에서 탈퇴할까요?" : "가족을 해체할까요?"}
-              </p>
+              <div style={{ fontSize:44, marginBottom:12 }}>🚪</div>
+              <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:"0 0 8px" }}>가족에서 탈퇴할까요?</p>
               <p style={{ color:C.textMuted, fontSize:13, margin:0, lineHeight:1.6 }}>
-                {confirm==="leave"
-                  ? "나만 가족에서 나가요.\n다른 가족의 데이터는 유지됩니다."
-                  : "⚠️ 모든 거래내역, 정기지출, 예산이\n영구적으로 삭제됩니다. 되돌릴 수 없어요."}
+                나만 가족에서 나가요. 다른 가족의 데이터는 유지됩니다.
               </p>
             </div>
             <div style={{ display:"flex", gap:10 }}>
@@ -2713,9 +2705,9 @@ function FamilyInfoCard() {
                 style={{ flex:1, padding:"13px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer", fontWeight:600 }}>
                 취소
               </button>
-              <button onClick={confirm==="leave" ? handleLeave : handleDelete} disabled={working}
+              <button onClick={handleLeave} disabled={working}
                 style={{ flex:1, padding:"13px", borderRadius:12, border:"none", background:C.expense, color:"#fff", fontSize:14, cursor:"pointer", fontWeight:700 }}>
-                {working ? "처리 중..." : confirm==="leave" ? "탈퇴" : "해체"}
+                {working ? "처리 중..." : "탈퇴"}
               </button>
             </div>
           </div>
@@ -2942,16 +2934,12 @@ function FamilySetupScreen({ userId, onSetup, onSignOut }) {
         <div style={{ textAlign:"center", marginBottom:32 }}>
           <div style={{ fontSize:44, marginBottom:12 }}>👨‍👩‍👧</div>
           <h2 style={{ color:C.text, fontSize:22, fontWeight:800, margin:"0 0 6px" }}>가족을 설정해요</h2>
-          <p style={{ color:C.textMuted, fontSize:14, margin:0 }}>새 가족을 만들거나 기존 가족에 참여하세요</p>
+          <p style={{ color:C.textMuted, fontSize:14, margin:0 }}>초대코드로 가족에 참여하세요</p>
         </div>
         {mode==="choose" && (
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-            <button onClick={()=>setMode("create")}
-              style={{ padding:"18px", borderRadius:14, border:`2px solid ${C.accent}`, background:C.accentSoft, color:C.accent, fontSize:15, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-              <span style={{ fontSize:22 }}>🏠</span> 새 가족 만들기
-            </button>
             <button onClick={()=>setMode("join")}
-              style={{ padding:"18px", borderRadius:14, border:`1px solid ${C.border}`, background:C.surface, color:C.text, fontSize:15, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
+              style={{ padding:"18px", borderRadius:14, border:`2px solid ${C.accent}`, background:C.accentSoft, color:C.accent, fontSize:15, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
               <span style={{ fontSize:22 }}>🔑</span> 초대코드로 참여
             </button>
           </div>
@@ -3234,7 +3222,7 @@ export default function App() {
           {activeTab==="stats"        && <StatsScreen />}
           {activeTab==="settings"     && <SettingsScreen />}
         </div>
-        <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, background:"rgba(245,246,250,0.95)", backdropFilter:"blur(16px)", borderTop:`1px solid ${C.border}`, zIndex:100 }}>
+        <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, background:"rgba(245,246,250,0.95)", backdropFilter:"blur(16px)", borderTop:`1px solid ${C.border}`, zIndex:100, paddingBottom:"env(safe-area-inset-bottom, 16px)" }}>
           {activeTab==="stats" && (
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"5px 0 2px", borderBottom:`1px solid ${C.border}` }}>
               <span style={{ fontSize:11, color:C.accent, fontWeight:600 }}>{now.getFullYear()}년 {now.getMonth()+1}월 기준</span>
@@ -3260,3 +3248,4 @@ export default function App() {
     </AppContext.Provider>
   );
 }
+
