@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.6.6";
+const APP_VERSION = "1.6.7";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2923,13 +2923,13 @@ function FamilySetupScreen({ userId, onSetup, onSignOut }) {
       if (!families?.length) throw new Error("초대코드가 올바르지 않아요");
       const family = families[0];
 
-      // 프로필에 family_id 업데이트
-      await sb.update("profiles", { family_id: family.id, role: "member" }, { id: userId }, token);
+      // 프로필에 family_id 업데이트 (승인 대기)
+      await sb.update("profiles", { family_id: family.id, role: "member", is_approved: false }, { id: userId }, token);
 
       // 혹시 프로필 없으면 insert
       const checkProfile = await sb.select("profiles", `id=eq.${userId}`, token);
       if (!checkProfile?.length) {
-        await sb.insert("profiles", { id: userId, family_id: family.id, role: "member" }, token);
+        await sb.insert("profiles", { id: userId, family_id: family.id, role: "member", is_approved: false }, token);
       }
 
       onSetup(family.id);
@@ -3221,6 +3221,32 @@ export default function App() {
         await _loadAll(familyId, tok);
       }}
     />
+  );
+
+  // 승인 대기 화면
+  if (profile?.family_id && !profile?.is_approved) return (
+    <div style={{ minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px" }}>
+      <div style={{ width:"100%", maxWidth:380, textAlign:"center" }}>
+        <div style={{ fontSize:56, marginBottom:16 }}>⏳</div>
+        <h2 style={{ color:C.text, fontSize:22, fontWeight:800, margin:"0 0 10px" }}>승인 대기 중이에요</h2>
+        <p style={{ color:C.textMuted, fontSize:14, lineHeight:1.7, margin:"0 0 32px" }}>
+          관리자가 참여를 승인하면 입장할 수 있어요. 관리자에게 승인을 요청해주세요!
+        </p>
+        <button onClick={async () => {
+          const tok = localStorage.getItem("sb_token");
+          const uid = profile?.id || authUser?.id;
+          const pList = await sb.select("profiles", `id=eq.${uid}`, tok);
+          if (pList?.length) setProfile(pList[0]);
+        }}
+          style={{ width:"100%", padding:"15px", borderRadius:12, border:`1px solid ${C.border}`, background:C.surface, color:C.accent, fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:12 }}>
+          승인 확인하기
+        </button>
+        <button onClick={handleSignOut}
+          style={{ width:"100%", padding:"15px", borderRadius:12, border:"none", background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer" }}>
+          로그아웃
+        </button>
+      </div>
+    </div>
   );
 
   const ctx = {
