@@ -2,13 +2,13 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.4.9";
+const APP_VERSION = "1.5.0";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
 // ══════════════════════════════════════════════════════════════
-const SUPABASE_URL      = "https://cbdgfzbshurlbnpcmqbk.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiZGdmemJzaHVybGJucGNtcWJrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5NTQwODUsImV4cCI6MjA5NjUzMDA4NX0.dOMQKUCP43oaAtS4akGOibgwdGTwkeBFe5CGmjROgLo";
+const SUPABASE_URL      = "https://pzuoyfqghouuvjwjqmwt.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6dW95ZnFnaG91dXZqd2pxbXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNDMwODUsImV4cCI6MjA5NjYxOTA4NX0.smTYOByqSCGorBi8PseDOegvysCgUukl7yHlupORVxY";
 
 // Supabase REST API 헬퍼
 const sb = {
