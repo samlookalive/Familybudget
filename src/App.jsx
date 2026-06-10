@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.5.1";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -3091,7 +3091,9 @@ export default function App() {
             }
           } else {
             localStorage.removeItem("sb_token");
-            setAuthLoading(false); return;
+            setAuthLoading(false);
+            setProfileLoading(false);
+            return;
           }
         }
         setToken(tok);
@@ -3208,6 +3210,7 @@ export default function App() {
   // ── 미로그인 ──────────────────────────────────────────────
   if (!token) return (
     <AuthScreen onAuth={async (tok, user, refreshTok) => {
+      if (!tok || !user?.id) return; // 방어코드
       localStorage.setItem("sb_token", tok);
       if (refreshTok) localStorage.setItem("sb_refresh_token", refreshTok);
       setToken(tok); setAuthUser(user);
