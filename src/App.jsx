@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.5.9";
+const APP_VERSION = "1.6.0";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -18,11 +18,17 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   }
 });
 
-// 세션 설정 헬퍼 - 토큰이 있을 때만 세션 설정
+// 세션 설정 헬퍼
 const setSupabaseSession = async (token, refreshToken="") => {
-  if (token) {
-    await supabase.auth.setSession({ access_token: token, refresh_token: refreshToken });
-  }
+  if (!token) return;
+  // SDK가 이미 세션을 가지고 있으면 그대로 사용
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token === token) return;
+  // 세션이 없거나 다른 토큰이면 새로 설정
+  await supabase.auth.setSession({ 
+    access_token: token, 
+    refresh_token: refreshToken || token 
+  });
 };
 
 // sb 헬퍼 - SDK 래퍼
