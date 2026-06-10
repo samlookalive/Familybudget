@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.7.0";
+const APP_VERSION = "1.7.1";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2697,7 +2697,7 @@ function FamilyInfoCard() {
                     await sb.update("profiles", { name: editName.trim() }, { id: profile.id }, tok);
                     setProfile(p => ({ ...p, name: editName.trim() }));
                   }
-                  if (profile?.role === "owner" && editFamilyName.trim()) {
+                  if (editFamilyName.trim()) {
                     await sb.update("families", { name: editFamilyName.trim() }, { id: family.id }, tok);
                     setFamily(f => ({ ...f, name: editFamilyName.trim() }));
                   }
