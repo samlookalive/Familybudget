@@ -2844,8 +2844,7 @@ function AuthScreen({ onAuth }) {
 
   return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"24px" }}>
-      <div style={{ width:"100%", maxWidth:380 }}>
-        <div style={{ textAlign:"center", marginBottom:36 }}>
+      <div style={{ width:"100%", maxWidth:380 }}>        <div style={{ textAlign:"center", marginBottom:36 }}>
           <div style={{ fontSize:52, marginBottom:12 }}>🏡</div>
           <h1 style={{ color:C.text, fontSize:26, fontWeight:800, margin:"0 0 6px" }}>우리집 가계부</h1>
           <p style={{ color:C.textMuted, fontSize:14, margin:0 }}>부부가 함께 쓰는 스마트 가계부</p>
@@ -2891,6 +2890,7 @@ function AuthScreen({ onAuth }) {
           style={{ width:"100%", padding:"15px", borderRadius:12, border:"none", background:loading?C.border:C.accent, color:"#fff", fontSize:16, fontWeight:700, cursor:loading?"default":"pointer" }}>
           {loading?"처리 중...":mode==="login"?"로그인":"회원가입"}
         </button>
+        <p style={{ color:C.textMuted, fontSize:11, textAlign:"center", marginTop:24 }}>v{APP_VERSION}</p>
       </div>
     </div>
   );
