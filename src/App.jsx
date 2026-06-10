@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.6.1";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -18,23 +18,12 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   }
 });
 
-// 세션 설정 헬퍼
-const setSupabaseSession = async (token, refreshToken="") => {
-  if (!token) return;
-  // SDK가 이미 세션을 가지고 있으면 그대로 사용
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token === token) return;
-  // 세션이 없거나 다른 토큰이면 새로 설정
-  await supabase.auth.setSession({ 
-    access_token: token, 
-    refresh_token: refreshToken || token 
-  });
-};
 
-// sb 헬퍼 - SDK 래퍼
+
+
+// sb 헬퍼 - SDK 래퍼 (SDK가 자체적으로 세션 관리)
 const sb = {
   async select(table, query="", token=null) {
-    await setSupabaseSession(token);
     let req = supabase.from(table).select("*");
     if (query) {
       query.split("&").forEach(part => {
@@ -57,14 +46,12 @@ const sb = {
   },
 
   async insert(table, data, token) {
-    await setSupabaseSession(token);
     const { data: result, error } = await supabase.from(table).insert(data).select();
     if (error) throw new Error(error.message);
     return result || [];
   },
 
   async update(table, data, match, token) {
-    await setSupabaseSession(token);
     let req = supabase.from(table).update(data);
     Object.entries(match).forEach(([k,v]) => { req = req.eq(k, v); });
     const { data: result, error } = await req.select();
@@ -73,7 +60,6 @@ const sb = {
   },
 
   async delete(table, match, token) {
-    await setSupabaseSession(token);
     let req = supabase.from(table).delete();
     Object.entries(match).forEach(([k,v]) => { req = req.eq(k, v); });
     const { error } = await req;
@@ -81,14 +67,12 @@ const sb = {
   },
 
   async upsert(table, data, onConflict, token) {
-    await setSupabaseSession(token);
     const { data: result, error } = await supabase.from(table).upsert(data, { onConflict }).select();
     if (error) throw new Error(error.message);
     return result || [];
   },
 
   async rpc(fn, params, token) {
-    await setSupabaseSession(token);
     const { data, error } = await supabase.rpc(fn, params);
     if (error) throw new Error(error.message);
     return data;
@@ -114,12 +98,10 @@ const sb = {
   },
 
   async signOut(token) {
-    await setSupabaseSession(token);
     await supabase.auth.signOut();
   },
 
   async getUser(token) {
-    await setSupabaseSession(token);
     const { data, error } = await supabase.auth.getUser();
     if (error) return { error };
     return data.user;
