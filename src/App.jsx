@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.4.5";
+const APP_VERSION = "1.4.6";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -2899,7 +2899,6 @@ function AuthScreen({ onAuth }) {
 
 // ── 가족 설정 화면 ────────────────────────────────────────────
 function FamilySetupScreen({ userId, onSetup, onSignOut }) {
-  const token = localStorage.getItem("sb_token"); // 항상 최신 토큰 사용
   const [mode,       setMode]       = useState("choose");
   const [familyName, setFamilyName] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -2908,6 +2907,8 @@ function FamilySetupScreen({ userId, onSetup, onSignOut }) {
 
   const handleCreate = async () => {
     if (!familyName.trim()) return;
+    const token = localStorage.getItem("sb_token"); // 클릭 시점에 최신 토큰 읽기
+    if (!token) { setError("로그인이 필요해요"); return; }
     setError(""); setLoading(true);
     try {
       // 1) 가족 생성
@@ -2940,6 +2941,8 @@ function FamilySetupScreen({ userId, onSetup, onSignOut }) {
 
   const handleJoin = async () => {
     if (inviteCode.length !== 6) return;
+    const token = localStorage.getItem("sb_token"); // 클릭 시점에 최신 토큰 읽기
+    if (!token) { setError("로그인이 필요해요"); return; }
     setError(""); setLoading(true);
     try {
       const families = await sb.select("families", `invite_code=eq.${inviteCode.toUpperCase()}`, token);
