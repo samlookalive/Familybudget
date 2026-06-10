@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.6.9";
+const APP_VERSION = "1.7.0";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2587,6 +2587,9 @@ function FamilyInfoCard() {
   const [family,  setFamily]  = useState(null);
   const [copied,  setCopied]  = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editFamilyName, setEditFamilyName] = useState("");
   const [confirm, setConfirm] = useState(null); // null | "leave"
   const [working, setWorking] = useState(false);
   const [leaveCode, setLeaveCode] = useState("");
@@ -2660,11 +2663,53 @@ function FamilyInfoCard() {
               <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>{profile?.name||""} · {profile?.role==="owner"?"가족장":"멤버"}</p>
             </div>
           </div>
-          <button onClick={handleSignOut}
-            style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>
-            로그아웃
-          </button>
+          <div style={{ display:"flex", gap:6 }}>
+            <button onClick={()=>{ setEditName(profile?.name||""); setEditFamilyName(family?.name||""); setEditing(true); }}
+              style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.accent, fontSize:12, cursor:"pointer" }}>
+              수정
+            </button>
+            <button onClick={handleSignOut}
+              style={{ padding:"6px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>
+              로그아웃
+            </button>
+          </div>
         </div>
+
+        {/* 이름 수정 모달 */}
+        {editing && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 24px" }}>
+            <div style={{ background:C.surface, borderRadius:20, padding:"24px", width:"100%", maxWidth:380, border:`1px solid ${C.border}` }}>
+              <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:"0 0 20px" }}>이름 수정</p>
+              <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 6px" }}>내 이름</p>
+              <input value={editName} onChange={e=>setEditName(e.target.value)}
+                style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", color:C.text, fontSize:15, boxSizing:"border-box", marginBottom:14 }} />
+              <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 6px" }}>가족 이름</p>
+              <input value={editFamilyName} onChange={e=>setEditFamilyName(e.target.value)}
+                style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", color:C.text, fontSize:15, boxSizing:"border-box", marginBottom:14 }} />
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={()=>setEditing(false)}
+                  style={{ flex:1, padding:"13px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer", fontWeight:600 }}>
+                  취소
+                </button>
+                <button onClick={async () => {
+                  const tok = localStorage.getItem("sb_token");
+                  if (editName.trim()) {
+                    await sb.update("profiles", { name: editName.trim() }, { id: profile.id }, tok);
+                    setProfile(p => ({ ...p, name: editName.trim() }));
+                  }
+                  if (profile?.role === "owner" && editFamilyName.trim()) {
+                    await sb.update("families", { name: editFamilyName.trim() }, { id: family.id }, tok);
+                    setFamily(f => ({ ...f, name: editFamilyName.trim() }));
+                  }
+                  setEditing(false);
+                }}
+                  style={{ flex:1, padding:"13px", borderRadius:12, border:"none", background:C.accent, color:"#fff", fontSize:14, cursor:"pointer", fontWeight:700 }}>
+                  저장
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 초대코드 */}
         <div style={{ background:C.surfaceHigh, borderRadius:12, padding:"12px 14px", marginBottom:12 }}>
