@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.5.6";
+const APP_VERSION = "1.5.7";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -11,29 +11,38 @@ const APP_VERSION = "1.5.6";
 const SUPABASE_URL      = "https://pzuoyfqghouuvjwjqmwt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6dW95ZnFnaG91dXZqd2pxbXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNDMwODUsImV4cCI6MjA5NjYxOTA4NX0.smTYOByqSCGorBi8PseDOegvysCgUukl7yHlupORVxY";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  }
+});
+
+// 세션 설정 헬퍼 - 토큰이 있을 때만 세션 설정
+const setSupabaseSession = async (token, refreshToken="") => {
+  if (token) {
+    await supabase.auth.setSession({ access_token: token, refresh_token: refreshToken });
+  }
+};
 
 // sb 헬퍼 - SDK 래퍼
 const sb = {
   async select(table, query="", token=null) {
-    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await setSupabaseSession(token);
     let req = supabase.from(table).select("*");
-    // query 파싱: "id=eq.xxx&order=created_at.desc"
     if (query) {
       query.split("&").forEach(part => {
-        const [key, val] = part.split("=");
-        if (!key || !val) return;
-        if (key.endsWith(".eq") || val.startsWith("eq.")) {
-          const col = key.replace(".eq","");
-          const v = val.replace("eq.","");
-          req = req.eq(col, v);
-        } else if (val.startsWith("order.") || key === "order") {
-          const orderVal = val.replace("order.","");
-          const [col2, dir] = orderVal.split(".");
-          req = req.order(col2, { ascending: dir !== "desc" });
-        } else if (key === "limit") {
-          req = req.limit(parseInt(val));
-        }
+        if (!part) return;
+        const eqMatch = part.match(/^(.+)=eq\.(.+)$/);
+        const orderMatch = part.match(/^order=(.+)\.(.+)$/);
+        const limitMatch = part.match(/^limit=(\d+)$/);
+        const inMatch = part.match(/^(.+)=in\.\((.+)\)$/);
+        const isMatch = part.match(/^(.+)=is\.(.+)$/);
+        if (eqMatch) req = req.eq(eqMatch[1], eqMatch[2]);
+        else if (orderMatch) req = req.order(orderMatch[1], { ascending: orderMatch[2] !== "desc" });
+        else if (limitMatch) req = req.limit(parseInt(limitMatch[1]));
+        else if (inMatch) req = req.in(inMatch[1], inMatch[2].split(","));
+        else if (isMatch) req = isMatch[2] === "null" ? req.is(isMatch[1], null) : req.not(isMatch[1], "is", null);
       });
     }
     const { data, error } = await req;
@@ -42,14 +51,14 @@ const sb = {
   },
 
   async insert(table, data, token) {
-    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await setSupabaseSession(token);
     const { data: result, error } = await supabase.from(table).insert(data).select();
     if (error) throw new Error(error.message);
     return result || [];
   },
 
   async update(table, data, match, token) {
-    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await setSupabaseSession(token);
     let req = supabase.from(table).update(data);
     Object.entries(match).forEach(([k,v]) => { req = req.eq(k, v); });
     const { data: result, error } = await req.select();
@@ -58,7 +67,7 @@ const sb = {
   },
 
   async delete(table, match, token) {
-    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await setSupabaseSession(token);
     let req = supabase.from(table).delete();
     Object.entries(match).forEach(([k,v]) => { req = req.eq(k, v); });
     const { error } = await req;
@@ -66,14 +75,14 @@ const sb = {
   },
 
   async upsert(table, data, onConflict, token) {
-    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await setSupabaseSession(token);
     const { data: result, error } = await supabase.from(table).upsert(data, { onConflict }).select();
     if (error) throw new Error(error.message);
     return result || [];
   },
 
   async rpc(fn, params, token) {
-    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await setSupabaseSession(token);
     const { data, error } = await supabase.rpc(fn, params);
     if (error) throw new Error(error.message);
     return data;
@@ -99,12 +108,12 @@ const sb = {
   },
 
   async signOut(token) {
-    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await setSupabaseSession(token);
     await supabase.auth.signOut();
   },
 
   async getUser(token) {
-    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await setSupabaseSession(token);
     const { data, error } = await supabase.auth.getUser();
     if (error) return { error };
     return data.user;
