@@ -1,144 +1,113 @@
 import React, { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.5.5";
+const APP_VERSION = "1.5.6";
 
 // ══════════════════════════════════════════════════════════════
-// Supabase 클라이언트
+// Supabase 클라이언트 (SDK)
 // ══════════════════════════════════════════════════════════════
 const SUPABASE_URL      = "https://pzuoyfqghouuvjwjqmwt.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6dW95ZnFnaG91dXZqd2pxbXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNDMwODUsImV4cCI6MjA5NjYxOTA4NX0.smTYOByqSCGorBi8PseDOegvysCgUukl7yHlupORVxY";
 
-// Supabase REST API 헬퍼
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// sb 헬퍼 - SDK 래퍼
 const sb = {
-  url: SUPABASE_URL,
-  key: SUPABASE_ANON_KEY,
-  headers: (extra={}) => ({
-    "Content-Type": "application/json",
-    "apikey": SUPABASE_ANON_KEY,
-    "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-    ...extra,
-  }),
-  authHeaders: (token, extra={}) => ({
-    "Content-Type": "application/json",
-    "apikey": SUPABASE_ANON_KEY,
-    "Authorization": `Bearer ${token}`,
-    ...extra,
-  }),
-
-  // apikey를 URL 쿼리파라미터로 추가
-  apiUrl: (path, query="") => {
-    return `${SUPABASE_URL}${path}${query ? "?"+query : ""}`;
-  },
-
-  async from(table) { return `${SUPABASE_URL}/rest/v1/${table}`; },
-
   async select(table, query="", token=null) {
-    const res = await fetch(sb.apiUrl(`/rest/v1/${table}`, query), {
-      headers: token ? sb.authHeaders(token) : sb.headers(),
-    });
-    const text = await res.text();
-    if (!text) return [];
-    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
+    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    let req = supabase.from(table).select("*");
+    // query 파싱: "id=eq.xxx&order=created_at.desc"
+    if (query) {
+      query.split("&").forEach(part => {
+        const [key, val] = part.split("=");
+        if (!key || !val) return;
+        if (key.endsWith(".eq") || val.startsWith("eq.")) {
+          const col = key.replace(".eq","");
+          const v = val.replace("eq.","");
+          req = req.eq(col, v);
+        } else if (val.startsWith("order.") || key === "order") {
+          const orderVal = val.replace("order.","");
+          const [col2, dir] = orderVal.split(".");
+          req = req.order(col2, { ascending: dir !== "desc" });
+        } else if (key === "limit") {
+          req = req.limit(parseInt(val));
+        }
+      });
+    }
+    const { data, error } = await req;
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 
   async insert(table, data, token) {
-    const res = await fetch(sb.apiUrl(`/rest/v1/${table}`), {
-      method: "POST",
-      headers: sb.authHeaders(token, { "Prefer": "return=representation" }),
-      body: JSON.stringify(data),
-    });
-    const text = await res.text();
-    if (!text) return [];
-    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
+    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    const { data: result, error } = await supabase.from(table).insert(data).select();
+    if (error) throw new Error(error.message);
+    return result || [];
   },
 
   async update(table, data, match, token) {
-    const q = Object.entries(match).map(([k,v])=>`${k}=eq.${v}`).join("&");
-    const res = await fetch(sb.apiUrl(`/rest/v1/${table}`, q), {
-      method: "PATCH",
-      headers: sb.authHeaders(token, { "Prefer": "return=representation" }),
-      body: JSON.stringify(data),
-    });
-    const text = await res.text();
-    if (!text) return [];
-    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
+    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    let req = supabase.from(table).update(data);
+    Object.entries(match).forEach(([k,v]) => { req = req.eq(k, v); });
+    const { data: result, error } = await req.select();
+    if (error) throw new Error(error.message);
+    return result || [];
   },
 
   async delete(table, match, token) {
-    const q = Object.entries(match).map(([k,v])=>`${k}=eq.${v}`).join("&");
-    await fetch(sb.apiUrl(`/rest/v1/${table}`, q), {
-      method: "DELETE",
-      headers: sb.authHeaders(token),
-    });
+    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    let req = supabase.from(table).delete();
+    Object.entries(match).forEach(([k,v]) => { req = req.eq(k, v); });
+    const { error } = await req;
+    if (error) throw new Error(error.message);
   },
 
   async upsert(table, data, onConflict, token) {
-    const res = await fetch(sb.apiUrl(`/rest/v1/${table}`, `on_conflict=${onConflict}`), {
-      method: "POST",
-      headers: sb.authHeaders(token, { "Prefer": "return=representation,resolution=merge-duplicates" }),
-      body: JSON.stringify(data),
-    });
-    const text = await res.text();
-    if (!text) return [];
-    try { return JSON.parse(text); } catch(e) { throw new Error(text.slice(0,100)); }
+    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    const { data: result, error } = await supabase.from(table).upsert(data, { onConflict }).select();
+    if (error) throw new Error(error.message);
+    return result || [];
+  },
+
+  async rpc(fn, params, token) {
+    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    const { data, error } = await supabase.rpc(fn, params);
+    if (error) throw new Error(error.message);
+    return data;
   },
 
   // Auth
   async signUp(email, password) {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
-      method: "POST",
-      headers: sb.headers(),
-      body: JSON.stringify({ email, password }),
-    });
-    return res.json();
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) return { error };
+    return { user: data.user, access_token: data.session?.access_token, refresh_token: data.session?.refresh_token };
   },
 
   async signIn(email, password) {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      headers: sb.headers(),
-      body: JSON.stringify({ email, password }),
-    });
-    const text = await res.text();
-    return text ? JSON.parse(text) : {};
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error };
+    return { user: data.user, access_token: data.session?.access_token, refresh_token: data.session?.refresh_token };
   },
 
   async refreshToken(refreshTok) {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
-      method: "POST",
-      headers: sb.headers(),
-      body: JSON.stringify({ refresh_token: refreshTok }),
-    });
-    const text = await res.text();
-    return text ? JSON.parse(text) : {};
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshTok });
+    if (error) return { error };
+    return { access_token: data.session?.access_token, refresh_token: data.session?.refresh_token };
   },
 
   async signOut(token) {
-    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
-      method: "POST",
-      headers: sb.authHeaders(token),
-    });
+    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    await supabase.auth.signOut();
   },
 
   async getUser(token) {
-    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: sb.authHeaders(token),
-    });
-    return res.json();
-  },
-
-  // RPC 호출
-  async rpc(fn, params, token) {
-    const res = await fetch(sb.apiUrl(`/rest/v1/rpc/${fn}`), {
-      method: "POST",
-      headers: token ? sb.authHeaders(token) : sb.headers(),
-      body: JSON.stringify(params),
-    });
-    const text = await res.text();
-    if (!text) return null;
-    try { return JSON.parse(text); } catch(e) { return null; }
+    if (token) await supabase.auth.setSession({ access_token: token, refresh_token: "" });
+    const { data, error } = await supabase.auth.getUser();
+    if (error) return { error };
+    return data.user;
   },
 };
 
@@ -2789,14 +2758,8 @@ function AuthScreen({ onAuth }) {
         if (res.error) {
           const msg = res.error.message || "";
           if (msg.includes("Invalid login") || msg.includes("invalid_credentials")) {
-            // 비밀번호 찾기 이메일 발송으로 이메일 존재 여부 확인
-            const resetRes = await fetch(`${SUPABASE_URL}/auth/v1/recover`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "apikey": SUPABASE_ANON_KEY },
-              body: JSON.stringify({ email }),
-            });
-            // 이메일이 없으면 422, 있으면 200
-            if (resetRes.status === 422 || resetRes.status === 400) {
+            const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
+            if (resetError?.message?.includes("User not found") || resetError?.status === 422 || resetError?.status === 400) {
               throw new Error("가입되지 않은 이메일이에요. 회원가입을 먼저 해주세요");
             } else {
               throw new Error("비밀번호가 틀렸어요");
