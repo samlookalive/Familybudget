@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.6.7";
+const APP_VERSION = "1.6.8";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3240,6 +3240,15 @@ export default function App() {
         }}
           style={{ width:"100%", padding:"15px", borderRadius:12, border:`1px solid ${C.border}`, background:C.surface, color:C.accent, fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:12 }}>
           승인 확인하기
+        </button>
+        <button onClick={async () => {
+          const tok = localStorage.getItem("sb_token");
+          const uid = profile?.id || authUser?.id;
+          await sb.update("profiles", { family_id: null, is_approved: false }, { id: uid }, tok);
+          setProfile(p => ({ ...p, family_id: null, is_approved: false }));
+        }}
+          style={{ width:"100%", padding:"15px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.expense, fontSize:14, fontWeight:600, cursor:"pointer", marginBottom:12 }}>
+          승인 대기 취소
         </button>
         <button onClick={handleSignOut}
           style={{ width:"100%", padding:"15px", borderRadius:12, border:"none", background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer" }}>
