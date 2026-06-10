@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.5.2";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -2807,6 +2807,7 @@ function AuthScreen({ onAuth }) {
         if (res.refresh_token) localStorage.setItem("sb_refresh_token", res.refresh_token);
         if (rememberEmail) localStorage.setItem("sb_saved_email", email);
         else localStorage.removeItem("sb_saved_email");
+        if (!res.user?.id) throw new Error("로그인 정보를 불러오지 못했어요. 다시 시도해주세요");
         onAuth(res.access_token, res.user, res.refresh_token);
       } else {
         const res = await sb.signUp(email, password);
