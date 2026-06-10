@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.6.8";
+const APP_VERSION = "1.6.9";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3236,7 +3236,12 @@ export default function App() {
           const tok = localStorage.getItem("sb_token");
           const uid = profile?.id || authUser?.id;
           const pList = await sb.select("profiles", `id=eq.${uid}`, tok);
-          if (pList?.length) setProfile(pList[0]);
+          if (pList?.length) {
+            setProfile(pList[0]);
+            if (!pList[0].is_approved) {
+              alert("아직 승인 전이에요. 관리자에게 다시 한번 요청해보세요! 😊");
+            }
+          }
         }}
           style={{ width:"100%", padding:"15px", borderRadius:12, border:`1px solid ${C.border}`, background:C.surface, color:C.accent, fontSize:15, fontWeight:700, cursor:"pointer", marginBottom:12 }}>
           승인 확인하기
