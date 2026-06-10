@@ -2,7 +2,7 @@ import React, { useState, useRef, useContext, createContext, useCallback, useEff
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.4.2";
+const APP_VERSION = "1.4.3";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트
@@ -24,6 +24,7 @@ const sb = {
     "Content-Type": "application/json",
     "apikey": SUPABASE_ANON_KEY,
     "Authorization": `Bearer ${token}`,
+    "Accept-Encoding": "identity",
     ...extra,
   }),
 
