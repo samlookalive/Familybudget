@@ -3,13 +3,13 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.6.2";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
 // ══════════════════════════════════════════════════════════════
 const SUPABASE_URL      = "https://pzuoyfqghouuvjwjqmwt.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_8-TUzOIpkzqu3QS0pJruAw_RLkQVlhY";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB6dW95ZnFnaG91dXZqd2pxbXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNDMwODUsImV4cCI6MjA5NjYxOTA4NX0.smTYOByqSCGorBi8PseDOegvysCgUukl7yHlupORVxY";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -3260,4 +3260,3 @@ export default function App() {
     </AppContext.Provider>
   );
 }
-
