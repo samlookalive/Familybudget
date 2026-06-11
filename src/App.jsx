@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.7.8";
+const APP_VERSION = "1.7.9";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1332,7 +1332,69 @@ function InputScreen() {
           {step==="input" && (
             <div>
               <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{display:"none"}}/>
-              {/* 텍스트 + STT */}
+
+              {/* 직접 입력 폼 - AI 입력 대체 */}
+              {singleManual ? (
+                <div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                    <p style={{color:C.text,fontSize:14,fontWeight:600,margin:0}}>직접 입력</p>
+                    <button onClick={()=>setSingleManual(false)} style={{color:C.accent,fontSize:12,background:"transparent",border:"none",cursor:"pointer"}}>← AI 입력으로</button>
+                  </div>
+                  <div style={{display:"flex",gap:8,marginBottom:12}}>
+                    {["expense","income"].map(t=>(
+                      <button key={t} onClick={()=>setManualSingleForm(f=>({...f,type:t}))}
+                        style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${manualSingleForm.type===t?(t==="income"?C.income:C.expense):C.border}`,background:manualSingleForm.type===t?(t==="income"?C.income+"22":C.expense+"22"):"transparent",color:manualSingleForm.type===t?(t==="income"?C.income:C.expense):C.textMuted,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+                        {t==="expense"?"💸 지출":"💰 수입"}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>금액</p>
+                    <div style={{display:"flex",alignItems:"center",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+                      <input type="text" value={manualSingleForm.amount?fmt(Number(manualSingleForm.amount)):""} onChange={e=>setManualSingleForm(f=>({...f,amount:e.target.value.replace(/,/g,"")}))} placeholder="0"
+                        style={{flex:1,background:"transparent",border:"none",outline:"none",color:manualSingleForm.type==="income"?C.income:C.expense,fontSize:18,padding:"12px 14px",fontFamily:"'DM Mono',monospace",fontWeight:700}}/>
+                      <span style={{color:C.textMuted,fontSize:13,paddingRight:14}}>원</span>
+                    </div>
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>사용처</p>
+                    <input value={manualSingleForm.memo} onChange={e=>setManualSingleForm(f=>({...f,memo:e.target.value}))} placeholder="예) 스타벅스, 버스"
+                      style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontSize:14,boxSizing:"border-box"}}/>
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 6px"}}>카테고리</p>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {Object.entries(CAT_ICON_MAP).map(([cat,icon])=>(
+                        <button key={cat} onClick={()=>setManualSingleForm(f=>({...f,category:cat}))}
+                          style={{padding:"5px 11px",borderRadius:16,border:`1px solid ${manualSingleForm.category===cat?C.accent:C.border}`,background:manualSingleForm.category===cat?C.accentSoft:"transparent",color:manualSingleForm.category===cat?C.accent:C.textMuted,fontSize:12,cursor:"pointer"}}>
+                          {icon} {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{marginBottom:16}}>
+                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>날짜</p>
+                    <input type="date" value={manualSingleForm.date} onChange={e=>setManualSingleForm(f=>({...f,date:e.target.value}))}
+                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14}}/>
+                  </div>
+                  <div style={{display:"flex",gap:10}}>
+                    <button onClick={()=>setSingleManual(false)}
+                      style={{flex:1,padding:"14px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:15,cursor:"pointer"}}>취소</button>
+                    <button onClick={()=>{
+                      if(!manualSingleForm.amount||!manualSingleForm.memo.trim()) return;
+                      addTransactions([{id:uid(),type:manualSingleForm.type,amount:Number(manualSingleForm.amount),memo:manualSingleForm.memo,category:manualSingleForm.category,date:manualSingleForm.date,is_group:false}]);
+                      setSingleManual(false);
+                      setManualSingleForm({type:"expense",amount:"",memo:"",category:"식비",date:today()});
+                      setStep("done");
+                      setTimeout(()=>{resetAll();setActiveTab("transactions");},1200);
+                    }} disabled={!manualSingleForm.amount||!manualSingleForm.memo.trim()}
+                      style={{flex:2,padding:"14px",borderRadius:12,border:"none",background:(manualSingleForm.amount&&manualSingleForm.memo.trim())?C.accent:C.border,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>
+                      저장하기
+                    </button>
+                  </div>
+                </div>
+              ) : (
+              <div>
               <div style={{background:C.surface,borderRadius:16,border:`1px solid ${isRecording?C.expense:C.border}`,marginBottom:14,transition:"border-color 0.2s"}}>
                 {isRecording&&(
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px 0"}}>
@@ -1395,74 +1457,7 @@ function InputScreen() {
                 ✏️ 직접 입력하기
               </button>
             </div>
-          )}
-
-          {/* 단건 직접 입력 폼 */}
-          {step==="input" && singleManual && (
-            <div style={{marginTop:16}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                <p style={{color:C.text,fontSize:14,fontWeight:600,margin:0}}>직접 입력</p>
-                <button onClick={()=>setSingleManual(false)} style={{color:C.accent,fontSize:12,background:"transparent",border:"none",cursor:"pointer"}}>← AI 입력으로</button>
-              </div>
-              {/* 지출/수입 */}
-              <div style={{display:"flex",gap:8,marginBottom:12}}>
-                {["expense","income"].map(t=>(
-                  <button key={t} onClick={()=>setManualSingleForm(f=>({...f,type:t}))}
-                    style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${manualSingleForm.type===t?(t==="income"?C.income:C.expense):C.border}`,background:manualSingleForm.type===t?(t==="income"?C.income+"22":C.expense+"22"):"transparent",color:manualSingleForm.type===t?(t==="income"?C.income:C.expense):C.textMuted,fontSize:13,fontWeight:600,cursor:"pointer"}}>
-                    {t==="expense"?"💸 지출":"💰 수입"}
-                  </button>
-                ))}
-              </div>
-              {/* 금액 */}
-              <div style={{marginBottom:10}}>
-                <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>금액</p>
-                <div style={{display:"flex",alignItems:"center",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
-                  <input type="text" value={manualSingleForm.amount?fmt(Number(manualSingleForm.amount)):""} onChange={e=>setManualSingleForm(f=>({...f,amount:e.target.value.replace(/,/g,"")}))} placeholder="0"
-                    style={{flex:1,background:"transparent",border:"none",outline:"none",color:manualSingleForm.type==="income"?C.income:C.expense,fontSize:18,padding:"12px 14px",fontFamily:"'DM Mono',monospace",fontWeight:700}}/>
-                  <span style={{color:C.textMuted,fontSize:13,paddingRight:14}}>원</span>
-                </div>
-              </div>
-              {/* 메모 */}
-              <div style={{marginBottom:10}}>
-                <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>사용처</p>
-                <input value={manualSingleForm.memo} onChange={e=>setManualSingleForm(f=>({...f,memo:e.target.value}))} placeholder="예) 스타벅스, 버스"
-                  style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontSize:14,boxSizing:"border-box"}}/>
-              </div>
-              {/* 카테고리 */}
-              <div style={{marginBottom:10}}>
-                <p style={{color:C.textMuted,fontSize:11,margin:"0 0 6px"}}>카테고리</p>
-                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {Object.entries(CAT_ICON_MAP).map(([cat,icon])=>(
-                    <button key={cat} onClick={()=>setManualSingleForm(f=>({...f,category:cat}))}
-                      style={{padding:"5px 11px",borderRadius:16,border:`1px solid ${manualSingleForm.category===cat?C.accent:C.border}`,background:manualSingleForm.category===cat?C.accentSoft:"transparent",color:manualSingleForm.category===cat?C.accent:C.textMuted,fontSize:12,cursor:"pointer"}}>
-                      {icon} {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* 날짜 */}
-              <div style={{marginBottom:16}}>
-                <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>날짜</p>
-                <input type="date" value={manualSingleForm.date} onChange={e=>setManualSingleForm(f=>({...f,date:e.target.value}))}
-                  style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14}}/>
-              </div>
-              {/* 저장 버튼 */}
-              <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>setSingleManual(false)}
-                  style={{flex:1,padding:"14px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:15,cursor:"pointer"}}>취소</button>
-                <button onClick={()=>{
-                  if(!manualSingleForm.amount||!manualSingleForm.memo.trim()) return;
-                  addTransactions([{id:uid(),type:manualSingleForm.type,amount:Number(manualSingleForm.amount),memo:manualSingleForm.memo,category:manualSingleForm.category,date:manualSingleForm.date,is_group:false}]);
-                  setSingleManual(false);
-                  setManualSingleForm({type:"expense",amount:"",memo:"",category:"식비",date:today()});
-                  setStep("done");
-                  setTimeout(()=>{resetAll();setActiveTab("transactions");},1200);
-                }} disabled={!manualSingleForm.amount||!manualSingleForm.memo.trim()}
-                  style={{flex:2,padding:"14px",borderRadius:12,border:"none",background:(manualSingleForm.amount&&manualSingleForm.memo.trim())?C.accent:C.border,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>
-                  저장하기
-                </button>
-              </div>
-            </div>
+            )}
           )}
         </div>
       )}
