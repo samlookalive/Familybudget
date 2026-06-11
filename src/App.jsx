@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.7.4";
+const APP_VERSION = "1.7.5";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -878,10 +878,19 @@ function InputScreen() {
     if(!input.trim()) return;
     setIsLoading(true); setLoadingMsg("AI가 분석 중...");
     try {
+      const tok = localStorage.getItem("sb_token");
+      const fid = profile?.family_id;
+      // 카테고리 목록 동적으로 가져오기
+      const catList = await sb.select("categories", `family_id=eq.${fid}&is_parent=eq.false&is_active=eq.true`, tok);
+      const categoryNames = catList?.map(c => c.name) || [];
+      // ai_rules 가져오기
+      const famList = await sb.select("families", `id=eq.${fid}`, tok);
+      const aiRules = famList?.[0]?.ai_rules || [];
+
       const res = await fetch("/api/parse-transaction", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: input }),
+        body: JSON.stringify({ text: input, categories: categoryNames, ai_rules: aiRules }),
       });
       const data = await res.json();
       if (!data.transactions?.length) throw new Error("파싱 실패");
@@ -1065,10 +1074,17 @@ function InputScreen() {
     if(!groupInput.trim())return;
     setGroupLoading(true);setGroupLoadMsg("묶음 항목 분석 중...");
     try{
+      const tok = localStorage.getItem("sb_token");
+      const fid = profile?.family_id;
+      const catList = await sb.select("categories", `family_id=eq.${fid}&is_parent=eq.false&is_active=eq.true`, tok);
+      const categoryNames = catList?.map(c => c.name) || [];
+      const famList = await sb.select("families", `id=eq.${fid}`, tok);
+      const aiRules = famList?.[0]?.ai_rules || [];
+
       const res = await fetch("/api/parse-group", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: groupInput }),
+        body: JSON.stringify({ text: groupInput, categories: categoryNames, ai_rules: aiRules }),
       });
       const data = await res.json();
       if(!data.group?.children?.length) throw new Error("empty");
@@ -1963,6 +1979,118 @@ const INIT_CATEGORIES = {
 const ICON_OPTIONS = ["🍚","🚌","🛍️","💊","🏪","🎬","✈️","🏠","📱","💴","📈","🎁","💡","📦","☕","🐶","💪","🎮","📚","🚗","⚡","🛡️","📡","🎵","🏋️","🍕","🏖️","💐","🎂","🔑"];
 const COLOR_OPTIONS = ["#4B78C0","#E05C2A","#2DA870","#9B59B6","#E67E22","#E74C3C","#1ABC9C","#F39C12","#3498DB","#9CA3AF"];
 
+// ── AI 규칙 탭 ────────────────────────────────────────────────
+function AIRulesTab() {
+  const { token, profile } = useApp();
+  const [rules, setRules] = useState([]);
+  const [familyData, setFamilyData] = useState(null);
+  const [keyword, setKeyword] = useState("");
+  const [category, setCategory] = useState("");
+  const [type, setType] = useState("expense");
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      if (!profile?.family_id || !token) return;
+      const famList = await sb.select("families", `id=eq.${profile.family_id}`, token);
+      if (famList?.length) {
+        setFamilyData(famList[0]);
+        setRules(famList[0].ai_rules || []);
+      }
+      setLoading(false);
+    };
+    load();
+  }, [profile?.family_id, token]);
+
+  const handleAdd = async () => {
+    if (!keyword.trim() || !category.trim()) return;
+    const newRule = { keyword: keyword.trim(), category: category.trim(), type };
+    const newRules = [...rules, newRule];
+    setSaving(true);
+    try {
+      await sb.update("families", { ai_rules: newRules }, { id: familyData.id }, token);
+      setRules(newRules);
+      setKeyword(""); setCategory(""); setType("expense");
+    } catch(e) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const handleDelete = async (idx) => {
+    const newRules = rules.filter((_,i) => i !== idx);
+    setSaving(true);
+    try {
+      await sb.update("families", { ai_rules: newRules }, { id: familyData.id }, token);
+      setRules(newRules);
+    } catch(e) { alert(e.message); }
+    setSaving(false);
+  };
+
+  if (loading) return <div style={{ padding:32, textAlign:"center", color:C.textMuted }}>불러오는 중...</div>;
+
+  return (
+    <div style={{ padding:"16px" }}>
+      <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, padding:"16px", marginBottom:12 }}>
+        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>AI 규칙 추가</p>
+        <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 12px", lineHeight:1.6 }}>특정 키워드가 입력되면 카테고리를 자동으로 지정해요.</p>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>키워드</p>
+            <input value={keyword} onChange={e=>setKeyword(e.target.value)} placeholder="예) 다이소, GS25"
+              style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
+          </div>
+          <div>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>카테고리</p>
+            <input value={category} onChange={e=>setCategory(e.target.value)} placeholder="예) 쇼핑, 식비"
+              style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 12px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
+          </div>
+          <div>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>유형</p>
+            <div style={{ display:"flex", gap:8 }}>
+              {["expense","income"].map(t=>(
+                <button key={t} onClick={()=>setType(t)}
+                  style={{ flex:1, padding:"10px", borderRadius:8, border:`1px solid ${type===t?C.accent:C.border}`, background:type===t?C.accentSoft:"transparent", color:type===t?C.accent:C.textMuted, fontSize:13, fontWeight:type===t?700:400, cursor:"pointer" }}>
+                  {t==="expense"?"💸 지출":"💰 수입"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button onClick={handleAdd} disabled={saving || !keyword.trim() || !category.trim()}
+            style={{ padding:"12px", borderRadius:10, border:"none", background:C.accent, color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer", marginTop:4 }}>
+            {saving ? "저장 중..." : "+ 규칙 추가"}
+          </button>
+        </div>
+      </div>
+
+      {rules.length > 0 && (
+        <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, padding:"16px" }}>
+          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 12px", fontWeight:600, textTransform:"uppercase", letterSpacing:0.8 }}>등록된 규칙 ({rules.length})</p>
+          {rules.map((r,i) => (
+            <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:i<rules.length-1?`1px solid ${C.border}`:"none" }}>
+              <div>
+                <span style={{ color:C.text, fontSize:14, fontWeight:600 }}>{r.keyword}</span>
+                <span style={{ color:C.textMuted, fontSize:12, margin:"0 8px" }}>→</span>
+                <span style={{ color:C.accent, fontSize:13 }}>{r.category}</span>
+                <span style={{ color:C.textMuted, fontSize:11, marginLeft:6 }}>{r.type==="income"?"수입":"지출"}</span>
+              </div>
+              <button onClick={()=>handleDelete(i)} disabled={saving}
+                style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${C.border}`, background:"transparent", color:C.expense, fontSize:12, cursor:"pointer" }}>
+                삭제
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {rules.length === 0 && (
+        <div style={{ textAlign:"center", padding:"32px 0", color:C.textMuted, fontSize:13 }}>
+          등록된 규칙이 없어요.<br/>자주 쓰는 가맹점 규칙을 추가해보세요!
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 가족 정보 카드 (설정 화면용) ─────────────────────────────
 function SettingsScreen() {
   const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets } = useApp();
@@ -2194,7 +2322,7 @@ function SettingsScreen() {
 
         {/* 설정 내 탭 */}
         <div style={{ display:"flex", background:C.surfaceHigh, borderRadius:12, padding:4, gap:4, marginTop:16 }}>
-          {[{v:"recurring",label:"정기지출",icon:"🔄"},{v:"budget",label:"예산",icon:"💰"},{v:"categories",label:"카테고리",icon:"🏷️"},{v:"family",label:"정보",icon:"ℹ️"}].map(t=>(
+          {[{v:"recurring",label:"정기지출",icon:"🔄"},{v:"budget",label:"예산",icon:"💰"},{v:"categories",label:"카테고리",icon:"🏷️"},{v:"ai",label:"AI규칙",icon:"🤖"},{v:"family",label:"정보",icon:"ℹ️"}].map(t=>(
             <button key={t.v} onClick={()=>setSettingTab(t.v)}
               style={{ flex:1, padding:"10px 6px", borderRadius:9, border:"none", background:settingTab===t.v?C.accent:"transparent",
                 color:settingTab===t.v?"#fff":C.textMuted, fontSize:9, fontWeight:settingTab===t.v?700:400, cursor:"pointer", transition:"all 0.2s", display:"flex", alignItems:"center", justifyContent:"center", gap:3 }}>
@@ -2431,6 +2559,10 @@ function SettingsScreen() {
             })}
           </div>
         </div>
+      )}
+
+      {settingTab==="ai" && (
+        <AIRulesTab />
       )}
 
       {settingTab==="family" && (
