@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.7.9";
+const APP_VERSION = "1.8.0";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1191,10 +1191,12 @@ function InputScreen() {
             <div>
               <div style={{background:C.surface,borderRadius:16,padding:"20px",border:`1px solid ${C.border}`,marginBottom:16}}>
                 <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
-                  <p style={{color:C.textMuted,fontSize:12,margin:0}}>AI가 이렇게 이해했어요 · 수정 가능해요</p>
+                  <p style={{color:C.textMuted,fontSize:12,margin:0}}>{parsed.confidence>=0.9?"AI가 이렇게 이해했어요":"직접 확인해주세요"} · 수정 가능해요</p>
                   <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <div style={{width:6,height:6,borderRadius:"50%",background:C.income}}/>
-                    <span style={{color:C.income,fontSize:11}}>신뢰도 {Math.round(parsed.confidence*100)}%</span>
+                    <div style={{width:6,height:6,borderRadius:"50%",background:parsed.confidence>=0.9?C.income:"#E67E22"}}/>
+                    <span style={{color:parsed.confidence>=0.9?C.income:"#E67E22",fontSize:11}}>
+                      {parsed.confidence>=0.9?`AI 분석 ${Math.round(parsed.confidence*100)}%`:"로컬 파싱"}
+                    </span>
                   </div>
                 </div>
                 <div style={{background:C.surfaceHigh,borderRadius:10,padding:"10px 14px",marginBottom:16}}>
