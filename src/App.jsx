@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.7.5";
+const APP_VERSION = "1.7.6";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -881,11 +881,16 @@ function InputScreen() {
       const tok = localStorage.getItem("sb_token");
       const fid = profile?.family_id;
       // 카테고리 목록 동적으로 가져오기
-      const catList = await sb.select("categories", `family_id=eq.${fid}&is_parent=eq.false&is_active=eq.true`, tok);
-      const categoryNames = catList?.map(c => c.name) || [];
-      // ai_rules 가져오기
-      const famList = await sb.select("families", `id=eq.${fid}`, tok);
-      const aiRules = famList?.[0]?.ai_rules || [];
+      let categoryNames = [];
+      let aiRules = [];
+      try {
+        const catList = await sb.select("categories", `family_id=eq.${fid}&is_parent=eq.false`, tok);
+        categoryNames = catList?.filter(c => c.is_active !== false).map(c => c.name) || [];
+        const famList = await sb.select("families", `id=eq.${fid}`, tok);
+        aiRules = famList?.[0]?.ai_rules || [];
+      } catch(e) {
+        console.log("카테고리/규칙 로드 실패, 기본값 사용:", e.message);
+      }
 
       const res = await fetch("/api/parse-transaction", {
         method: "POST",
@@ -897,7 +902,8 @@ function InputScreen() {
       const t = data.transactions[0];
       setParsed({ ...t, icon: CAT_ICON_MAP[t.category] || "📦", confidence: 0.95 });
       setStep("confirm");
-    } catch {
+    } catch(e) {
+      console.log("AI 파싱 실패, 로컬 파서 사용:", e.message);
       // 실패 시 로컬 파서로 폴백
       const amtM = input.match(/(\d[\d,]*)(만원|원|만)/);
       let amount = 0;
@@ -1076,10 +1082,16 @@ function InputScreen() {
     try{
       const tok = localStorage.getItem("sb_token");
       const fid = profile?.family_id;
-      const catList = await sb.select("categories", `family_id=eq.${fid}&is_parent=eq.false&is_active=eq.true`, tok);
-      const categoryNames = catList?.map(c => c.name) || [];
-      const famList = await sb.select("families", `id=eq.${fid}`, tok);
-      const aiRules = famList?.[0]?.ai_rules || [];
+      let categoryNames = [];
+      let aiRules = [];
+      try {
+        const catList = await sb.select("categories", `family_id=eq.${fid}&is_parent=eq.false`, tok);
+        categoryNames = catList?.filter(c => c.is_active !== false).map(c => c.name) || [];
+        const famList = await sb.select("families", `id=eq.${fid}`, tok);
+        aiRules = famList?.[0]?.ai_rules || [];
+      } catch(e) {
+        console.log("카테고리/규칙 로드 실패:", e.message);
+      }
 
       const res = await fetch("/api/parse-group", {
         method: "POST",
