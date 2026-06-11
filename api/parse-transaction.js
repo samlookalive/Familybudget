@@ -48,19 +48,25 @@ export default async function handler(req, res) {
     );
 
     const data = await response.json();
+    console.log("Gemini raw response:", JSON.stringify(data));
+    
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+    console.log("Raw text:", raw);
+    
     const clean = raw.replace(/```json|```/g, "").trim();
+    console.log("Clean text:", clean);
 
     let parsed;
     try {
       parsed = JSON.parse(clean);
-    } catch {
-      // JSON 파싱 실패 시 빈 배열
+    } catch(parseErr) {
+      console.log("Parse error:", parseErr.message);
       parsed = [];
     }
 
     return res.status(200).json({ transactions: Array.isArray(parsed) ? parsed : [parsed] });
   } catch (e) {
+    console.log("Fetch error:", e.message);
     return res.status(500).json({ error: e.message });
   }
 }
