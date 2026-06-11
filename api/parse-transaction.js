@@ -63,6 +63,9 @@ ${rulesText}
     });
 
     const data = await response.json();
+    console.log("OpenRouter status:", response.status);
+    console.log("Raw content:", data.choices?.[0]?.message?.content);
+    console.log("Error:", data.error);
     const raw = data.choices?.[0]?.message?.content || "[]";
     const clean = raw.replace(/```json|```/g, "").trim();
 
