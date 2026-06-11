@@ -42,7 +42,7 @@ JSON만 반환해. 다른 텍스트 없이.
         "HTTP-Referer": "https://familybudget-ochre.vercel.app",
       },
       body: JSON.stringify({
-        model: "qwen/qwen2.5-72b-instruct",
+        model: "qwen/qwen-2.5-72b-instruct",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
         max_tokens: 512,
