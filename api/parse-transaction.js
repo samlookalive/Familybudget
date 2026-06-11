@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         "HTTP-Referer": "https://familybudget-ochre.vercel.app",
       },
       body: JSON.stringify({
-        model: "google/gemma-3-12b-it:free",
+        model: "qwen/qwen3.5-plus",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
         max_tokens: 1024,
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     });
 
     const data = await response.json();
-    console.log("OpenRouter response:", JSON.stringify(data));
+    console.log("Response:", JSON.stringify(data));
 
     const raw = data.choices?.[0]?.message?.content || "[]";
     const clean = raw.replace(/```json|```/g, "").trim();
