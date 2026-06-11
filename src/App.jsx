@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.7.3";
+const APP_VERSION = "1.7.4";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -614,7 +614,7 @@ function TransactionsScreen() {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
         <div>
           <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>금액</p>
-          <input type="number" value={editForm.amount} onChange={e=>setEditForm(f=>({...f,amount:e.target.value}))}
+          <input type="text" value={fmt(Number(editForm.amount))} onChange={e=>setEditForm(f=>({...f,amount:e.target.value.replace(/,/g,"")}))}
             style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }} />
         </div>
         <div>
@@ -1183,7 +1183,7 @@ function InputScreen() {
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.border}`,gap:12}}>
                   <span style={{color:C.textMuted,fontSize:13,flexShrink:0}}>금액</span>
                   <div style={{display:"flex",alignItems:"center",gap:4}}>
-                    <input type="number" value={parsed.amount} onChange={e=>setParsed(p=>({...p,amount:Number(e.target.value)}))}
+                    <input type="text" value={fmt(parsed.amount)} onChange={e=>setParsed(p=>({...p,amount:Number(e.target.value.replace(/,/g,""))}))}
                       style={{width:110,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 10px",color:parsed.type==="income"?C.income:C.expense,fontSize:14,fontWeight:700,textAlign:"right",fontFamily:"'DM Mono',monospace"}}/>
                     <span style={{color:C.textMuted,fontSize:13}}>원</span>
                   </div>
@@ -1259,7 +1259,7 @@ function InputScreen() {
                       <div style={{padding:"14px 16px",background:"#13172280",borderTop:`1px solid ${C.border}`}}>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                           <div><p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>금액</p>
-                            <input type="number" value={item.amount} onChange={e=>setParsedList(l=>l.map((x,j)=>j===i?{...x,amount:Number(e.target.value)}:x))}
+                            <input type="text" value={fmt(item.amount)} onChange={e=>setParsedList(l=>l.map((x,j)=>j===i?{...x,amount:Number(e.target.value.replace(/,/g,""))}:x))}
                               style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",color:C.expense,fontSize:13,fontWeight:700,boxSizing:"border-box",fontFamily:"'DM Mono',monospace"}}/></div>
                           <div><p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>날짜</p>
                             <input type="date" value={item.date} onChange={e=>setParsedList(l=>l.map((x,j)=>j===i?{...x,date:e.target.value}:x))}
@@ -1407,7 +1407,7 @@ function InputScreen() {
                     </div>
                     <div style={{display:"flex",gap:8}}>
                       <div style={{flex:1}}>
-                        <input type="number" value={child.amount} onChange={e=>setGroupParsed(p=>({...p,children:p.children.map((c,j)=>j===i?{...c,amount:Number(e.target.value)}:c)}))}
+                        <input type="text" value={fmt(child.amount)} onChange={e=>setGroupParsed(p=>({...p,children:p.children.map((c,j)=>j===i?{...c,amount:Number(e.target.value.replace(/,/g,""))}:c)}))}
                           style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:"6px 10px",color:C.expense,fontSize:13,fontWeight:700,fontFamily:"'DM Mono',monospace",boxSizing:"border-box"}}/>
                       </div>
                       <select value={child.category} onChange={e=>setGroupParsed(p=>({...p,children:p.children.map((c,j)=>j===i?{...c,category:e.target.value}:c)}))}
