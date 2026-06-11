@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.7.2";
+const APP_VERSION = "1.7.3";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -944,13 +944,11 @@ function InputScreen() {
     if(!imgBase64)return;
     setIsLoading(true);setLoadingMsg("이미지 분석 중...");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:IMAGE_SYSTEM_PROMPT,
-          messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:imgBase64}},{type:"text",text:"이 이미지에서 모든 카드/결제 내역을 추출해주세요."}]}]})});
+      const res=await fetch("/api/parse-image",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({imageBase64:imgBase64,mode:"single"})});
       const data=await res.json();
-      const list=JSON.parse(data.content?.map(b=>b.text||"").join("").trim().replace(/```json|```/g,"").trim());
-      if(!Array.isArray(list)||list.length===0){setImgError("결제 내역을 찾지 못했어요.");setIsLoading(false);setLoadingMsg("");return;}
-      const enriched=list.map(item=>({...item,icon:CAT_ICON_MAP[item.category]||"📦"}));
+      if(!data.transactions?.length){setImgError("결제 내역을 찾지 못했어요.");setIsLoading(false);setLoadingMsg("");return;}
+      const enriched=data.transactions.map(item=>({...item,icon:CAT_ICON_MAP[item.category]||"📦"}));
       setParsedList(enriched);setCheckedIdx(enriched.map((_,i)=>i));setStep("img_confirm");
     }catch{setImgError("분석 중 오류가 발생했어요.");}
     setIsLoading(false);setLoadingMsg("");
@@ -970,13 +968,11 @@ function InputScreen() {
     if(!groupImgBase64)return;
     setGroupLoading(true);setGroupLoadMsg("이미지에서 묶음 항목 분석 중...");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:GROUP_IMAGE_PROMPT,
-          messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:groupImgBase64}},{type:"text",text:"이 이미지의 내역들을 하나의 묶음으로 추출해주세요."}]}]})});
+      const res=await fetch("/api/parse-image",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({imageBase64:groupImgBase64,mode:"group"})});
       const data=await res.json();
-      const parsed=JSON.parse(data.content?.map(b=>b.text||"").join("").trim().replace(/```json|```/g,"").trim());
-      if(!parsed?.children?.length){setGroupImgError("항목을 찾지 못했어요.");setGroupLoading(false);setGroupLoadMsg("");return;}
-      setGroupParsed(parsed);setGroupStep("confirm");
+      if(!data.group?.children?.length){setGroupImgError("항목을 찾지 못했어요.");setGroupLoading(false);setGroupLoadMsg("");return;}
+      setGroupParsed(data.group);setGroupStep("confirm");
     }catch{setGroupImgError("분석 중 오류가 발생했어요.");}
     setGroupLoading(false);setGroupLoadMsg("");
   };
