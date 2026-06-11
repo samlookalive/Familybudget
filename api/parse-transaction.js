@@ -6,7 +6,7 @@ export default async function handler(req, res) {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: "text is required" });
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "API key not configured" });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 아래 텍스트에서 가계부 거래 내역을 파싱해줘.
 
 규칙:
-- 월급, 급여, 수입, 들어왔 → type: "income"
+- 월급, 급여, 수입, 들어왔, 입금 → type: "income"
 - 나머지 → type: "expense"
 - 만원 = 10000원, 천원 = 1000원
 - 날짜가 없으면 오늘 날짜 사용
@@ -35,38 +35,37 @@ export default async function handler(req, res) {
 텍스트: ${text}`;
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 1024 },
-        }),
-      }
-    );
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "HTTP-Referer": "https://familybudget-ochre.vercel.app",
+      },
+      body: JSON.stringify({
+        model: "meta-llama/llama-3.3-70b-instruct:free",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0,
+        max_tokens: 1024,
+      }),
+    });
 
     const data = await response.json();
-    console.log("Gemini raw response:", JSON.stringify(data));
-    
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
-    console.log("Raw text:", raw);
-    
+    console.log("OpenRouter response:", JSON.stringify(data));
+
+    const raw = data.choices?.[0]?.message?.content || "[]";
     const clean = raw.replace(/```json|```/g, "").trim();
-    console.log("Clean text:", clean);
 
     let parsed;
     try {
       parsed = JSON.parse(clean);
-    } catch(parseErr) {
-      console.log("Parse error:", parseErr.message);
+    } catch {
       parsed = [];
     }
 
     return res.status(200).json({ transactions: Array.isArray(parsed) ? parsed : [parsed] });
   } catch (e) {
-    console.log("Fetch error:", e.message);
+    console.log("Error:", e.message);
     return res.status(500).json({ error: e.message });
   }
 }
