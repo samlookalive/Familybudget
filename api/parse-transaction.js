@@ -32,9 +32,7 @@ export default async function handler(req, res) {
 입력: "스타벅스 6500원"
 출력: [{"date":"${today}","amount":6500,"memo":"스타벅스","type":"expense","category":"식비"}]
 
-텍스트: ${text}
-
-/no_think`;
+텍스트: ${text}`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -48,13 +46,12 @@ export default async function handler(req, res) {
         model: "qwen/qwen3.5-flash-02-23",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
-        max_tokens: 1024,
+        max_tokens: 512,
+        include_reasoning: false,
       }),
     });
 
     const data = await response.json();
-    console.log("Response:", JSON.stringify(data));
-
     const raw = data.choices?.[0]?.message?.content || "[]";
     const clean = raw.replace(/```json|```/g, "").trim();
 
@@ -67,7 +64,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ transactions: Array.isArray(parsed) ? parsed : [parsed] });
   } catch (e) {
-    console.log("Error:", e.message);
     return res.status(500).json({ error: e.message });
   }
 }
