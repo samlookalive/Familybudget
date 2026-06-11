@@ -1333,7 +1333,6 @@ function InputScreen() {
             <div>
               <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} style={{display:"none"}}/>
 
-              {/* 직접 입력 폼 - AI 입력 대체 */}
               {singleManual ? (
                 <div>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
@@ -1394,71 +1393,70 @@ function InputScreen() {
                   </div>
                 </div>
               ) : (
-              <div>
-              <div style={{background:C.surface,borderRadius:16,border:`1px solid ${isRecording?C.expense:C.border}`,marginBottom:14,transition:"border-color 0.2s"}}>
-                {isRecording&&(
-                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px 0"}}>
-                    <div style={{width:8,height:8,borderRadius:"50%",background:C.expense,animation:"pulse 1s ease-in-out infinite"}}/>
-                    <span style={{color:C.expense,fontSize:12,fontWeight:600}}>녹음 중</span>
-                    <span style={{color:C.textMuted,fontSize:12,fontFamily:"'DM Mono',monospace"}}>{fmtSec(recSeconds)}</span>
+                <div>
+                  <div style={{background:C.surface,borderRadius:16,border:`1px solid ${isRecording?C.expense:C.border}`,marginBottom:14,transition:"border-color 0.2s"}}>
+                    {isRecording&&(
+                      <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px 0"}}>
+                        <div style={{width:8,height:8,borderRadius:"50%",background:C.expense,animation:"pulse 1s ease-in-out infinite"}}/>
+                        <span style={{color:C.expense,fontSize:12,fontWeight:600}}>녹음 중</span>
+                        <span style={{color:C.textMuted,fontSize:12,fontFamily:"'DM Mono',monospace"}}>{fmtSec(recSeconds)}</span>
+                      </div>
+                    )}
+                    <div style={{display:"flex",alignItems:"flex-end",gap:4,padding:"4px"}}>
+                      <textarea value={input} onChange={e=>setInput(e.target.value)}
+                        onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();handleTextParse();}}}
+                        placeholder={isRecording?"🎙 음성을 인식하고 있어요...":"예) 오늘 마트에서 35000원 썼어\n어제 버스 1400원 냈어"} rows={3}
+                        style={{flex:1,background:"transparent",border:"none",outline:"none",color:C.text,fontSize:15,resize:"none",padding:"10px 10px 10px 14px",fontFamily:"inherit",lineHeight:1.6}}/>
+                      <button onClick={isRecording?stopRecording:()=>startRecording(setInput)}
+                        style={{width:42,height:42,borderRadius:12,border:`1px solid ${isRecording?"#FF4444":C.border}`,marginBottom:8,background:isRecording?"#FF4444":"transparent",color:isRecording?"#fff":C.textMuted,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {isRecording?"⏹":"🎙"}
+                      </button>
+                      <button onClick={handleTextParse} disabled={!input.trim()||isLoading}
+                        style={{margin:"0 8px 8px 0",width:42,height:42,borderRadius:12,border:"none",background:input.trim()?C.accent:C.border,color:"#fff",fontSize:18,cursor:input.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {isLoading?<div style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>:"↑"}
+                      </button>
+                    </div>
                   </div>
-                )}
-                <div style={{display:"flex",alignItems:"flex-end",gap:4,padding:"4px"}}>
-                  <textarea value={input} onChange={e=>setInput(e.target.value)}
-                    onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();handleTextParse();}}}
-                    placeholder={isRecording?"🎙 음성을 인식하고 있어요...":"예) 오늘 마트에서 35000원 썼어\n어제 버스 1400원 냈어"} rows={3}
-                    style={{flex:1,background:"transparent",border:"none",outline:"none",color:C.text,fontSize:15,resize:"none",padding:"10px 10px 10px 14px",fontFamily:"inherit",lineHeight:1.6}}/>
-                  <button onClick={isRecording?stopRecording:()=>startRecording(setInput)}
-                    style={{width:42,height:42,borderRadius:12,border:`1px solid ${isRecording?"#FF4444":C.border}`,marginBottom:8,background:isRecording?"#FF4444":"transparent",color:isRecording?"#fff":C.textMuted,fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    {isRecording?"⏹":"🎙"}
-                  </button>
-                  <button onClick={handleTextParse} disabled={!input.trim()||isLoading}
-                    style={{margin:"0 8px 8px 0",width:42,height:42,borderRadius:12,border:"none",background:input.trim()?C.accent:C.border,color:"#fff",fontSize:18,cursor:input.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    {isLoading?<div style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>:"↑"}
-                  </button>
-                </div>
-              </div>
-              {sttError&&<div style={{background:"#FF444411",border:"1px solid #FF444433",borderRadius:10,padding:"8px 12px",marginBottom:12}}><span style={{color:"#FF6666",fontSize:12}}>⚠️ {sttError}</span></div>}
-
-              {imgPreview?(
-                <div style={{background:C.surface,borderRadius:16,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
-                  <div style={{position:"relative"}}>
-                    <img src={imgPreview} alt="" style={{width:"100%",maxHeight:200,objectFit:"contain",background:C.surfaceHigh,display:"block"}}/>
-                    <button onClick={()=>{setImgPreview(null);setImgBase64(null);setImgError("");if(fileRef.current)fileRef.current.value="";}}
-                      style={{position:"absolute",top:8,right:8,width:28,height:28,borderRadius:"50%",background:"rgba(0,0,0,0.6)",border:"none",color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                  {sttError&&<div style={{background:"#FF444411",border:"1px solid #FF444433",borderRadius:10,padding:"8px 12px",marginBottom:12}}><span style={{color:"#FF6666",fontSize:12}}>⚠️ {sttError}</span></div>}
+                  {imgPreview?(
+                    <div style={{background:C.surface,borderRadius:16,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+                      <div style={{position:"relative"}}>
+                        <img src={imgPreview} alt="" style={{width:"100%",maxHeight:200,objectFit:"contain",background:C.surfaceHigh,display:"block"}}/>
+                        <button onClick={()=>{setImgPreview(null);setImgBase64(null);setImgError("");if(fileRef.current)fileRef.current.value="";}}
+                          style={{position:"absolute",top:8,right:8,width:28,height:28,borderRadius:"50%",background:"rgba(0,0,0,0.6)",border:"none",color:"#fff",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+                      </div>
+                      <div style={{padding:"12px 14px"}}>
+                        <p style={{color:C.textMuted,fontSize:11,margin:"0 0 10px"}}>카드 사용내역, 문자 캡처, 영수증 사진을 분석합니다</p>
+                        <button onClick={handleImageParse} disabled={isLoading}
+                          style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:isLoading?C.border:C.accent,color:"#fff",fontSize:14,fontWeight:700,cursor:isLoading?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                          {isLoading?<><div style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>{loadingMsg}</>:"🔍 이미지 분석하기"}
+                        </button>
+                      </div>
+                    </div>
+                  ):(
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                      <button onClick={()=>{if(fileRef.current){fileRef.current.setAttribute("capture","camera");fileRef.current.click();}}}
+                        style={{padding:"14px 10px",borderRadius:14,border:`1px dashed ${C.border}`,background:C.surface,color:C.textSub,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                        <span style={{fontSize:24}}>📷</span><span style={{fontWeight:600}}>카메라 촬영</span><span style={{fontSize:10,color:C.textMuted}}>영수증 · 문자 화면</span>
+                      </button>
+                      <button onClick={()=>{if(fileRef.current){fileRef.current.removeAttribute("capture");fileRef.current.click();}}}
+                        style={{padding:"14px 10px",borderRadius:14,border:`1px dashed ${C.border}`,background:C.surface,color:C.textSub,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                        <span style={{fontSize:24}}>🖼️</span><span style={{fontWeight:600}}>앨범에서 선택</span><span style={{fontSize:10,color:C.textMuted}}>캡처 이미지 · 스크린샷</span>
+                      </button>
+                    </div>
+                  )}
+                  {imgError&&<p style={{color:C.expense,fontSize:12,margin:"0 0 12px",textAlign:"center"}}>{imgError}</p>}
+                  <p style={{color:C.textMuted,fontSize:12,margin:"0 0 8px"}}>빠른 예시</p>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+                    {QUICK.map(ex=><button key={ex} onClick={()=>setInput(ex)} style={{padding:"8px 14px",borderRadius:20,border:`1px solid ${C.border}`,background:C.surface,color:C.textSub,fontSize:12,cursor:"pointer"}}>{ex}</button>)}
                   </div>
-                  <div style={{padding:"12px 14px"}}>
-                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 10px"}}>카드 사용내역, 문자 캡처, 영수증 사진을 분석합니다</p>
-                    <button onClick={handleImageParse} disabled={isLoading}
-                      style={{width:"100%",padding:"13px",borderRadius:10,border:"none",background:isLoading?C.border:C.accent,color:"#fff",fontSize:14,fontWeight:700,cursor:isLoading?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                      {isLoading?<><div style={{width:16,height:16,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>{loadingMsg}</>:"🔍 이미지 분석하기"}
-                    </button>
-                  </div>
-                </div>
-              ):(
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-                  <button onClick={()=>{if(fileRef.current){fileRef.current.setAttribute("capture","camera");fileRef.current.click();}}}
-                    style={{padding:"14px 10px",borderRadius:14,border:`1px dashed ${C.border}`,background:C.surface,color:C.textSub,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:24}}>📷</span><span style={{fontWeight:600}}>카메라 촬영</span><span style={{fontSize:10,color:C.textMuted}}>영수증 · 문자 화면</span>
-                  </button>
-                  <button onClick={()=>{if(fileRef.current){fileRef.current.removeAttribute("capture");fileRef.current.click();}}}
-                    style={{padding:"14px 10px",borderRadius:14,border:`1px dashed ${C.border}`,background:C.surface,color:C.textSub,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:24}}>🖼️</span><span style={{fontWeight:600}}>앨범에서 선택</span><span style={{fontSize:10,color:C.textMuted}}>캡처 이미지 · 스크린샷</span>
+                  <button onClick={()=>setSingleManual(true)}
+                    style={{width:"100%",padding:"12px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:13,cursor:"pointer"}}>
+                    ✏️ 직접 입력하기
                   </button>
                 </div>
               )}
-              {imgError&&<p style={{color:C.expense,fontSize:12,margin:"0 0 12px",textAlign:"center"}}>{imgError}</p>}
-              <p style={{color:C.textMuted,fontSize:12,margin:"0 0 8px"}}>빠른 예시</p>
-              <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
-                {QUICK.map(ex=><button key={ex} onClick={()=>setInput(ex)} style={{padding:"8px 14px",borderRadius:20,border:`1px solid ${C.border}`,background:C.surface,color:C.textSub,fontSize:12,cursor:"pointer"}}>{ex}</button>)}
-              </div>
-              <button onClick={()=>setSingleManual(true)}
-                style={{width:"100%",padding:"12px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:13,cursor:"pointer"}}>
-                ✏️ 직접 입력하기
-              </button>
             </div>
-            </div>
-            )}
           )}
         </div>
       )}
