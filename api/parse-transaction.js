@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         "HTTP-Referer": "https://familybudget-ochre.vercel.app",
       },
       body: JSON.stringify({
-        model: "qwen/qwen3.5-flash-02-23",
+        model: "qwen/qwen2.5-72b-instruct",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
         max_tokens: 512,
