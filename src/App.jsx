@@ -1457,6 +1457,7 @@ function InputScreen() {
                 ✏️ 직접 입력하기
               </button>
             </div>
+            </div>
             )}
           )}
         </div>
