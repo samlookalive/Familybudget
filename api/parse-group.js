@@ -18,9 +18,7 @@ export default async function handler(req, res) {
 JSON만 반환해. 다른 텍스트 없이.
 형식: {"group_name":"묶음명","category":"대표카테고리","date":"YYYY-MM-DD","children":[{"memo":"항목명","amount":숫자,"category":"카테고리"}]}
 
-텍스트: ${text}
-
-/no_think`;
+텍스트: ${text}`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -34,7 +32,8 @@ JSON만 반환해. 다른 텍스트 없이.
         model: "qwen/qwen3.5-flash-02-23",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
-        max_tokens: 1024,
+        max_tokens: 512,
+        include_reasoning: false,
       }),
     });
 
