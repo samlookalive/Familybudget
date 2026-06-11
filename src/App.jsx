@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.7.1";
+const APP_VERSION = "1.7.2";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -873,27 +873,39 @@ function InputScreen() {
   const QUICK = ["오늘 마트에서 35000원 썼어","어제 버스 1400원","스타벅스 6500원","6월 월급 300만원 들어왔어"];
   const GROUP_QUICK = ["제주여행 숙박 15만 렌트카 8만 식비 3만","결혼식 축의금 10만 교통비 2만 식사 5만","회사 회식 식대 45000 택시 12000"];
 
-  // ── 단건 파싱 (mock) ─────────────────────────────────────────
-  const mockParse = (text) => {
-    const patterns = [
-      {regex:/마트|이마트/,category:"생활/마트"},{regex:/버스|지하철|택시/,category:"교통"},
-      {regex:/스타벅스|카페|커피/,category:"식비"},{regex:/월급|급여/,category:"월급",income:true},
-      {regex:/약|병원|의료/,category:"의료/건강"},
-    ];
-    const amtM=text.match(/(\d[\d,]*)(만원|원|만)/);
-    let amount=0;
-    if(amtM){const r=amtM[1].replace(/,/g,"");amount=amtM[2].includes("만")?Number(r)*10000:Number(r);}
-    const m=patterns.find(p=>p.regex.test(text));
-    const isIncome=m?.income||/수입|들어왔|입금/.test(text);
-    const cat=m?.category||"기타";
-    return {type:isIncome?"income":"expense",amount:amount||10000,category:cat,
-      icon:CAT_ICON_MAP[cat]||"📦",memo:text.match(/[가-힣a-zA-Z]+/)?.[0]||text.slice(0,6),date:today(),confidence:0.94};
-  };
-
-  const handleTextParse = () => {
+  // ── 단건 파싱 (Gemini API) ────────────────────────────────────
+  const handleTextParse = async () => {
     if(!input.trim()) return;
     setIsLoading(true); setLoadingMsg("AI가 분석 중...");
-    setTimeout(()=>{setParsed(mockParse(input));setStep("confirm");setIsLoading(false);setLoadingMsg("");},700);
+    try {
+      const res = await fetch("/api/parse-transaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: input }),
+      });
+      const data = await res.json();
+      if (!data.transactions?.length) throw new Error("파싱 실패");
+      const t = data.transactions[0];
+      setParsed({ ...t, icon: CAT_ICON_MAP[t.category] || "📦", confidence: 0.95 });
+      setStep("confirm");
+    } catch {
+      // 실패 시 로컬 파서로 폴백
+      const amtM = input.match(/(\d[\d,]*)(만원|원|만)/);
+      let amount = 0;
+      if(amtM){ const r=amtM[1].replace(/,/g,""); amount=amtM[2].includes("만")?Number(r)*10000:Number(r); }
+      const patterns = [
+        {regex:/마트|이마트/,category:"생활/마트"},{regex:/버스|지하철|택시/,category:"교통"},
+        {regex:/스타벅스|카페|커피/,category:"식비"},{regex:/월급|급여/,category:"월급",income:true},
+        {regex:/약|병원|의료/,category:"의료/건강"},
+      ];
+      const m = patterns.find(p=>p.regex.test(input));
+      const isIncome = m?.income || /수입|들어왔|입금/.test(input);
+      const cat = m?.category || "기타";
+      setParsed({ type:isIncome?"income":"expense", amount:amount||10000, category:cat,
+        icon:CAT_ICON_MAP[cat]||"📦", memo:input.match(/[가-힣a-zA-Z]+/)?.[0]||input.slice(0,6), date:today(), confidence:0.7 });
+      setStep("confirm");
+    }
+    setIsLoading(false); setLoadingMsg("");
   };
 
   // ── STT ─────────────────────────────────────────────────────
@@ -1052,20 +1064,20 @@ function InputScreen() {
     };
   };
 
-  // ── 묶음 자연어 파싱 (Claude API → 실패 시 로컬 파서) ────────
+  // ── 묶음 자연어 파싱 (Gemini API → 실패 시 로컬 파서) ────────
   const handleGroupTextParse=async()=>{
     if(!groupInput.trim())return;
     setGroupLoading(true);setGroupLoadMsg("묶음 항목 분석 중...");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,system:GROUP_TEXT_PROMPT,
-          messages:[{role:"user",content:groupInput}]})});
-      const data=await res.json();
-      const parsed=JSON.parse(data.content?.map(b=>b.text||"").join("").trim().replace(/```json|```/g,"").trim());
-      if(!parsed?.children?.length) throw new Error("empty");
-      setGroupParsed(parsed);setGroupStep("confirm");
+      const res = await fetch("/api/parse-group", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: groupInput }),
+      });
+      const data = await res.json();
+      if(!data.group?.children?.length) throw new Error("empty");
+      setGroupParsed(data.group);setGroupStep("confirm");
     }catch{
-      // API 실패 시 로컬 파서로 폴백
       const fallback = parseGroupText(groupInput);
       setGroupParsed(fallback);
       setGroupStep("confirm");
