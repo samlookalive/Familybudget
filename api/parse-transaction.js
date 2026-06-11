@@ -32,7 +32,9 @@ export default async function handler(req, res) {
 입력: "스타벅스 6500원"
 출력: [{"date":"${today}","amount":6500,"memo":"스타벅스","type":"expense","category":"식비"}]
 
-텍스트: ${text}`;
+텍스트: ${text}
+
+/no_think`;
 
   try {
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
