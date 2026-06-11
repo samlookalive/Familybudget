@@ -29,7 +29,7 @@ JSON만 반환해. 다른 텍스트 없이.
         "HTTP-Referer": "https://familybudget-ochre.vercel.app",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-3.3-70b-instruct:free",
+        model: "google/gemma-3-12b-it:free",
         messages: [{ role: "user", content: prompt }],
         temperature: 0,
         max_tokens: 1024,
