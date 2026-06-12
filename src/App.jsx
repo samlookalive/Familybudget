@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.8.3";
+const APP_VERSION = "1.8.4";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -157,9 +157,14 @@ const TREND_HISTORY = {
 
 
 // transactions의 category 값은 "식비","교통","월세","구독","생활/마트" 등 다양
-// CATEGORIES 키와 name 양쪽으로 찾아서 반환
-function getCat(category) {
+// CATEGORIES 키와 name 양쪽으로 찾아서 반환. allCategories(DB)가 있으면 우선 매칭
+function getCat(category, allCategories) {
   if (!category) return { name:category, icon:"📦", color:C.accent };
+  // 0) DB 카테고리 매칭 (동적)
+  if (allCategories?.length) {
+    const found = allCategories.find(c=>c.name===category);
+    if (found) return { name:found.name, icon:found.icon, color:found.color };
+  }
   // 1) 직접 키 매칭
   if (CATEGORIES[category]) return CATEGORIES[category];
   // 2) name 필드 매칭
@@ -221,11 +226,11 @@ function calcSummary(transactions) {
   return { income, expense, balance: income - expense };
 }
 
-function calcCategoryStats(transactions) {
+function calcCategoryStats(transactions, allCategories) {
   const flat = transactions.flatMap(t => t.is_group ? t.children : [t]);
   const map = {};
   flat.filter(t=>t.type==="expense").forEach(t => {
-    const cat  = CATEGORIES[t.category] || { name:t.category, icon:"📦" };
+    const cat  = getCat(t.category, allCategories);
     const key  = cat.name;
     if (!map[key]) map[key] = { category:key, icon:cat.icon, amount:0 };
     map[key].amount += t.amount;
@@ -260,10 +265,10 @@ function calcTrend(transactions) {
 // 홈 화면
 // ══════════════════════════════════════════════════════════════
 function HomeScreen() {
-  const { transactions, recurring, budgets, profile } = useApp();
+  const { transactions, recurring, budgets, profile, allCategories } = useApp();
   const monthTx  = filterCurrentMonth(transactions);
   const summary  = calcSummary(monthTx);
-  const catStats = calcCategoryStats(monthTx);
+  const catStats = calcCategoryStats(monthTx, allCategories);
   const { fixed, variable } = calcFixedVariable(monthTx, recurring);
   const pct = summary.income > 0 ? Math.round((summary.expense/summary.income)*100) : 0;
   const [familyName, setFamilyName] = useState("우리집");
@@ -328,7 +333,7 @@ function HomeScreen() {
               {drillItems.length===0
                 ? <p style={{ color:C.textMuted, fontSize:14, textAlign:"center", padding:"32px 0" }}>항목이 없어요</p>
                 : drillItems.map((tx,i)=>{
-                    const cat = getCat(tx.category);
+                    const cat = getCat(tx.category, allCategories);
                     return (
                       <div key={tx.id||i} style={{ display:"flex", alignItems:"center", padding:"13px 20px",
                         borderBottom:`1px solid ${C.border}` }}>
@@ -471,7 +476,7 @@ function HomeScreen() {
             {catStats.length===0
               ? <p style={{ color:C.textMuted, fontSize:13, textAlign:"center", margin:"16px 0" }}>아직 지출 내역이 없어요</p>
               : catStats.slice(0,5).map(s=>{
-                const cat = getCat(s.category);
+                const cat = getCat(s.category, allCategories);
                 return (
                   <div key={s.category} onClick={()=>setCatDrillDown(s.category)}
                     style={{ marginBottom:12, cursor:"pointer" }}>
@@ -502,7 +507,7 @@ function HomeScreen() {
       {catDrillDown && (() => {
         const now = new Date();
         const monthLabel = `${now.getMonth()+1}월`;
-        const cat = getCat(catDrillDown);
+        const cat = getCat(catDrillDown, allCategories);
         const catItems = monthTx
           .flatMap(t => t.is_group ? t.children : [t])
           .filter(t => t.type==="expense" && t.category===catDrillDown);
@@ -569,7 +574,7 @@ function HomeScreen() {
 // 거래 내역 화면
 // ══════════════════════════════════════════════════════════════
 function TransactionsScreen() {
-  const { transactions, setTransactions } = useApp();
+  const { transactions, setTransactions, allCategories } = useApp();
   const [expandedId,   setExpandedId]   = useState(null);
   const [editingId,    setEditingId]    = useState(null);
   const [editForm,     setEditForm]     = useState({});
@@ -671,7 +676,7 @@ function TransactionsScreen() {
   );
 
   const TxRow = ({ tx, isChild=false, parentId=null }) => {
-    const cat      = getCat(tx.category);
+    const cat      = getCat(tx.category, allCategories);
     const isEditing = editingId===tx.id;
     const isOpen    = expandedId===tx.id;
     return (
@@ -1747,7 +1752,7 @@ function InputScreen() {
 // 통계 화면
 // ══════════════════════════════════════════════════════════════
 function StatsScreen() {
-  const { transactions, budgets } = useApp();
+  const { transactions, budgets, allCategories } = useApp();
   const [trendMode,    setTrendMode]    = useState("total");
   const [chartFilter,  setChartFilter]  = useState("both"); // both | income | expense
   const [selectedCats, setSelectedCats] = useState(["식비","월세/관리비","교통"]);
@@ -1756,7 +1761,7 @@ function StatsScreen() {
 
   const monthTx    = filterCurrentMonth(transactions);
   const summary    = calcSummary(monthTx);
-  const catStats   = calcCategoryStats(monthTx);
+  const catStats   = calcCategoryStats(monthTx, allCategories);
   const { fixed, variable } = calcFixedVariable(monthTx, []);
   const trendData  = calcTrend(monthTx);
 
@@ -1996,7 +2001,7 @@ function StatsScreen() {
         {catStats.length===0
           ? <p style={{ color:C.textMuted, fontSize:13, textAlign:"center", margin:"16px 0" }}>아직 지출 내역이 없어요</p>
           : catStats.map(s=>{
-            const cat = getCat(s.category);
+            const cat = getCat(s.category, allCategories);
             const catBudget = budgets.categories[s.category];
             const bPct   = catBudget ? Math.round((s.amount/catBudget)*100) : null;
             const bOver  = bPct !== null && bPct >= 100;
@@ -3382,6 +3387,7 @@ export default function App() {
     totalEnabled: false, total: 0,
     categories: {},
   });
+  const [allCategories, setAllCategories] = useState([]); // [{id,name,icon,color,type,isParent,parentId}]
   const now = new Date();
 
   // ── DB 데이터 로드 ────────────────────────────────────────
@@ -3407,6 +3413,14 @@ export default function App() {
       if (bData?.length) {
         const b=bData[0];
         setBudgetsLocal({totalEnabled:b.total_enabled,total:b.total||0,categories:b.categories||{}});
+      }
+
+      const catData = await sb.select("categories", `family_id=eq.${fid}&order=sort_order.asc`, tok);
+      if (catData?.length) {
+        const formatted = catData
+          .filter(c => !c.is_parent)
+          .map(c => ({ id:c.id, name:c.name, icon:c.icon, color:c.color, type:c.type, parentId:c.parent_id }));
+        setAllCategories(formatted);
       }
     } catch(e) { ; }
   };
@@ -3643,6 +3657,7 @@ export default function App() {
     transactions, setTransactions, recurring, setRecurring,
     addTransactions, activeTab, setActiveTab,
     budgets, setBudgets, token, profile, setProfile, authUser, handleSignOut,
+    allCategories, setAllCategories,
   };
 
   return (
