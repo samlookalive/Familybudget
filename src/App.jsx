@@ -1,9 +1,10 @@
 import React, { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.8.4";
+const APP_VERSION = "1.9.1";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -148,13 +149,6 @@ const CAT_ICON_MAP = {
 const INIT_TRANSACTIONS = [];
 const INIT_RECURRING = [];
 
-// 과거 6개월 트렌드 (1~5월은 고정, 6월은 실시간 계산)
-const TREND_HISTORY = {
-  months:  [],
-  income:  [],
-  expense: [],
-};
-
 
 // transactions의 category 값은 "식비","교통","월세","구독","생활/마트" 등 다양
 // CATEGORIES 키와 name 양쪽으로 찾아서 반환. allCategories(DB)가 있으면 우선 매칭
@@ -250,15 +244,44 @@ function calcFixedVariable(transactions, recurring) {
   return { fixed: Math.max(fixed,0), variable: Math.max(variable,0) };
 }
 
-function calcTrend(transactions) {
+// 올해(1월~현재월) 월별 수입/지출 집계 → recharts AreaChart용 데이터
+function calcYearlyTrend(transactions, year) {
+  const now = new Date();
+  const curMonth = year === now.getFullYear() ? now.getMonth()+1 : 12; // 올해면 현재월까지, 과거면 12월까지
   const flat = transactions.flatMap(t=>t.is_group?t.children:[t]);
-  const income  = flat.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
-  const expense = flat.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
-  return {
-    months:  [...TREND_HISTORY.months, "6월"],
-    income:  [...TREND_HISTORY.income,  income],
-    expense: [...TREND_HISTORY.expense, expense],
-  };
+
+  const result = [];
+  for (let m=1; m<=curMonth; m++) {
+    const ym = `${year}-${String(m).padStart(2,"0")}`;
+    const items = flat.filter(t=>t.date?.startsWith(ym));
+    const income  = items.filter(t=>t.type==="income" ).reduce((s,t)=>s+t.amount,0);
+    const expense = items.filter(t=>t.type==="expense").reduce((s,t)=>s+t.amount,0);
+    result.push({ month:`${m}월`, 수입:income, 지출:expense });
+  }
+  return result;
+}
+
+// 올해(1월~현재월) 월별 카테고리별 지출 집계 → recharts LineChart용 데이터
+function calcCategoryTrend(transactions, allCategories, year) {
+  const now = new Date();
+  const curMonth = year === now.getFullYear() ? now.getMonth()+1 : 12;
+  const flat = transactions.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense");
+
+  // 등장하는 모든 카테고리명 수집
+  const catSet = new Set();
+  flat.forEach(t => { if(t.date?.startsWith(String(year))) catSet.add(getCat(t.category, allCategories).name); });
+
+  const result = [];
+  for (let m=1; m<=curMonth; m++) {
+    const ym = `${year}-${String(m).padStart(2,"0")}`;
+    const items = flat.filter(t=>t.date?.startsWith(ym));
+    const row = { month:`${m}월` };
+    catSet.forEach(cat => {
+      row[cat] = items.filter(t=>getCat(t.category, allCategories).name===cat).reduce((s,t)=>s+t.amount,0);
+    });
+    result.push(row);
+  }
+  return { data: result, categories: [...catSet] };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1753,22 +1776,31 @@ function InputScreen() {
 // ══════════════════════════════════════════════════════════════
 function StatsScreen() {
   const { transactions, budgets, allCategories } = useApp();
+  const now = new Date();
   const [trendMode,    setTrendMode]    = useState("total");
-  const [chartFilter,  setChartFilter]  = useState("both"); // both | income | expense
-  const [selectedCats, setSelectedCats] = useState(["식비","월세/관리비","교통"]);
-  const [hoveredBar,   setHoveredBar]   = useState(null);
-  const [hoveredCat,   setHoveredCat]   = useState(null);
+  const [selectedCats, setSelectedCats] = useState([]);
+
+  // 데이터가 존재하는 연도 목록 (최신순)
+  const availableYears = [...new Set(
+    transactions.flatMap(t=>t.is_group?t.children:[t])
+      .map(t=>t.date?.slice(0,4)).filter(Boolean)
+  )].sort((a,b)=>b-a).map(Number);
+  if (!availableYears.includes(now.getFullYear())) availableYears.unshift(now.getFullYear());
+
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
 
   const monthTx    = filterCurrentMonth(transactions);
   const summary    = calcSummary(monthTx);
   const catStats   = calcCategoryStats(monthTx, allCategories);
   const { fixed, variable } = calcFixedVariable(monthTx, []);
-  const trendData  = calcTrend(monthTx);
-
-  const CAT_TREND_COLORS = { 식비:"#E8834A", "월세/관리비":"#6C8EBF", 교통:"#7C9EFF", 구독서비스:"#A78BFA", 여행:"#34D399", "의료/건강":"#F87171", 쇼핑:"#FBBF24", "생활/마트":"#60A5FA", "문화/여가":"#C084FC" };
-  const catTrendData = catStats.map(c=>({ name:c.category, icon:c.icon, color:CAT_TREND_COLORS[c.category]||C.accent, amounts:[...TREND_HISTORY.expense.map(()=>0), c.amount] }));
-  const BAR_H = 140;
+  const yearlyTrend  = calcYearlyTrend(transactions, selectedYear);
+  const categoryTrend = calcCategoryTrend(transactions, allCategories, selectedYear);
   const toggleCat = (n) => setSelectedCats(p=>p.includes(n)?p.filter(c=>c!==n):[...p,n]);
+
+  // 카테고리 목록이 로드되면(또는 연도 변경 시) 상위 3개를 기본 선택
+  useEffect(() => {
+    setSelectedCats(categoryTrend.categories.slice(0,3));
+  }, [categoryTrend.categories.join(","), selectedYear]);
 
   return (
     <div style={{ paddingBottom:110 }}>
@@ -1789,11 +1821,17 @@ function StatsScreen() {
 
       {/* 월별 추이 */}
       <div style={{ margin:"0 16px 16px", background:C.surface, borderRadius:16, padding:"16px 18px", border:`1px solid ${C.border}` }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <p style={{ color:C.text, fontSize:13, fontWeight:600, margin:0 }}>월별 추이</p>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <p style={{ color:C.text, fontSize:13, fontWeight:600, margin:0 }}>월별 추이</p>
+            <select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))}
+              style={{ background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:6, padding:"3px 6px", color:C.accent, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+              {availableYears.map(y => <option key={y} value={y}>{y}년</option>)}
+            </select>
+          </div>
           <div style={{ display:"flex", background:C.surfaceHigh, borderRadius:8, padding:3, gap:2 }}>
             {[{v:"total",label:"전체"},{v:"category",label:"카테고리"}].map(o=>(
-              <button key={o.v} onClick={()=>{ setTrendMode(o.v); setHoveredBar(null); setHoveredCat(null); }}
+              <button key={o.v} onClick={()=>{ setTrendMode(o.v); }}
                 style={{ padding:"5px 12px", borderRadius:6, border:"none", background:trendMode===o.v?C.accent:"transparent", color:trendMode===o.v?"#fff":C.textMuted, fontSize:11, fontWeight:600, cursor:"pointer" }}>
                 {o.label}
               </button>
@@ -1802,195 +1840,59 @@ function StatsScreen() {
         </div>
 
         {trendMode==="total" ? (
-          <div>
-            {/* 수입/지출 선택 버튼 — 차트보다 위에 고정 */}
-            <div style={{ display:"flex", gap:6, marginBottom:12, position:"relative", zIndex:5 }}>
-              {[{v:"both",label:"전체"},{v:"income",label:"수입",color:C.income},{v:"expense",label:"지출",color:C.expense}].map(o=>(
-                <button key={o.v} onClick={()=>{ setChartFilter(o.v); setHoveredBar(null); }}
-                  style={{ padding:"5px 14px", borderRadius:20, border:`1px solid ${chartFilter===o.v?(o.color||C.accent):C.border}`, background:chartFilter===o.v?(o.color||C.accent)+"22":"transparent", color:chartFilter===o.v?(o.color||C.accent):C.textMuted, fontSize:11, fontWeight:600, cursor:"pointer", transition:"all 0.15s" }}>
-                  {o.label}
-                </button>
-              ))}
-            </div>
-
-            {/* 양방향 차트 — 수입↑ 0기준선 지출↓ */}
-            {(()=>{
-              const HALF = 90; // 위/아래 각 절반 높이(px)
-              const incMax = Math.max(...trendData.income, 1);
-              const expMax = Math.max(...trendData.expense, 1);
-
-              // 깔끔한 눈금 계산
-              const niceMax = (val) => {
-                const step = val / 3;
-                const mag  = Math.pow(10, Math.floor(Math.log10(step)));
-                const nice = Math.ceil(step / mag) * mag;
-                return nice * 3;
-              };
-              const incNice = niceMax(incMax);
-              const expNice = niceMax(expMax);
-
-              const toIncH  = (v) => Math.max(Math.round((v / incNice) * HALF * 0.92), v > 0 ? 3 : 0);
-              const toExpH  = (v) => Math.max(Math.round((v / expNice) * HALF * 0.92), v > 0 ? 3 : 0);
-
-              const visInc = chartFilter !== "expense";
-              const visExp = chartFilter !== "income";
-
-              // Y축 눈금 레이블
-              const incTicks = [incNice, Math.round(incNice/2), 0].map(v =>
-                v >= 1000000 ? `${(v/1000000).toFixed(1)}백만` : v >= 10000 ? `${Math.round(v/10000)}만` : v > 0 ? `${Math.round(v/1000)}k` : "0"
-              );
-              const expTicks = [Math.round(expNice/2), expNice].map(v =>
-                v >= 10000 ? `${Math.round(v/10000)}만` : `${Math.round(v/1000)}k`
-              );
-
-              return (
-                <div style={{ display:"flex", gap:4, overflow:"hidden" }}>
-                  {/* Y축 */}
-                  <div style={{ display:"flex", flexDirection:"column", width:36, flexShrink:0 }}>
-                    {/* 수입 Y축 (위) */}
-                    {visInc && (
-                      <div style={{ height:HALF, display:"flex", flexDirection:"column", justifyContent:"space-between", paddingBottom:0 }}>
-                        {incTicks.map((v,i)=>(
-                          <span key={i} style={{ color:C.income, fontSize:8, textAlign:"right", lineHeight:1 }}>{v}</span>
-                        ))}
-                      </div>
-                    )}
-                    {/* 기준선 공간 */}
-                    <div style={{ height:20 }} />
-                    {/* 지출 Y축 (아래) */}
-                    {visExp && (
-                      <div style={{ height:HALF, display:"flex", flexDirection:"column", justifyContent:"space-between", paddingTop:0 }}>
-                        {expTicks.map((v,i)=>(
-                          <span key={i} style={{ color:C.expense, fontSize:8, textAlign:"right", lineHeight:1 }}>{v}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 차트 영역 */}
-                  <div style={{ flex:1, minWidth:0, position:"relative" }}>
-                    {/* 수입 영역 (위) */}
-                    {visInc && (
-                      <div style={{ height:HALF, display:"flex", alignItems:"flex-end", gap:3, position:"relative" }}>
-                        {/* 가이드라인 */}
-                        {[0,0.5,1].map(r=>(
-                          <div key={r} style={{ position:"absolute", bottom:`${r*100}%`, left:0, right:0, height:1, background:C.border, opacity:0.5, pointerEvents:"none" }} />
-                        ))}
-                        {trendData.months.map((m,i)=>{
-                          const h   = toIncH(trendData.income[i]);
-                          const act = hoveredBar?.i===i && hoveredBar?.t==="inc";
-                          const cur = i===trendData.months.length-1;
-                          return (
-                            <div key={m} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-end", height:"100%", position:"relative" }}>
-                              {act && (
-                                <div style={{ position:"absolute", bottom:h+4, left:"50%", transform:"translateX(-50%)", background:C.income, color:"#fff", fontSize:8, fontWeight:700, padding:"2px 5px", borderRadius:4, whiteSpace:"nowrap", zIndex:10, fontFamily:"'DM Mono',monospace" }}>
-                                  +{Math.round(trendData.income[i]/10000)}만
-                                </div>
-                              )}
-                              <div onClick={()=>setHoveredBar(act?null:{i,t:"inc"})}
-                                style={{ width:"100%", height:h, background:C.income, borderRadius:"4px 4px 0 0", opacity:act?1:cur?0.9:0.6, cursor:"pointer", transition:"opacity 0.15s" }} />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* 0 기준선 + 월 레이블 */}
-                    <div style={{ height:20, display:"flex", alignItems:"center", position:"relative" }}>
-                      <div style={{ position:"absolute", left:0, right:0, top:"50%", height:2, background:C.border }} />
-                      <div style={{ display:"flex", width:"100%", zIndex:1 }}>
-                        {trendData.months.map((m,i)=>{
-                          const cur = i===trendData.months.length-1;
-                          return (
-                            <div key={m} style={{ flex:1, textAlign:"center" }}>
-                              <span style={{ color:cur?C.accent:C.textMuted, fontSize:9, fontWeight:cur?700:400, background:C.surface, padding:"0 2px" }}>{m}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* 지출 영역 (아래) */}
-                    {visExp && (
-                      <div style={{ height:HALF, display:"flex", alignItems:"flex-start", gap:3, position:"relative" }}>
-                        {[0,0.5,1].map(r=>(
-                          <div key={r} style={{ position:"absolute", top:`${r*100}%`, left:0, right:0, height:1, background:C.border, opacity:0.5, pointerEvents:"none" }} />
-                        ))}
-                        {trendData.months.map((m,i)=>{
-                          const h   = toExpH(trendData.expense[i]);
-                          const act = hoveredBar?.i===i && hoveredBar?.t==="exp";
-                          const cur = i===trendData.months.length-1;
-                          return (
-                            <div key={m} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-start", height:"100%", position:"relative" }}>
-                              <div onClick={()=>setHoveredBar(act?null:{i,t:"exp"})}
-                                style={{ width:"100%", height:h, background:C.expense, borderRadius:"0 0 4px 4px", opacity:act?1:cur?0.9:0.75, cursor:"pointer", transition:"opacity 0.15s" }} />
-                              {act && (
-                                <div style={{ position:"absolute", top:h+4, left:"50%", transform:"translateX(-50%)", background:C.expense, color:"#fff", fontSize:8, fontWeight:700, padding:"2px 5px", borderRadius:4, whiteSpace:"nowrap", zIndex:10, fontFamily:"'DM Mono',monospace" }}>
-                                  -{Math.round(trendData.expense[i]/10000)}만
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* 범례 */}
-            <div style={{ display:"flex", gap:14, justifyContent:"center", marginTop:10 }}>
-              {[{color:C.income,label:"↑ 수입",v:"income"},{color:C.expense,label:"↓ 지출",v:"expense"}]
-                .filter(l=>chartFilter==="both"||chartFilter===l.v)
-                .map(l=>(
-                <div key={l.label} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                  <div style={{ width:10, height:10, borderRadius:2, background:l.color }} />
-                  <span style={{ color:C.textMuted, fontSize:11 }}>{l.label}</span>
-                </div>
-              ))}
-            </div>
+          <div style={{ width:"100%", height:220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={yearlyTrend} margin={{ top:8, right:8, left:-12, bottom:0 }}>
+                <defs>
+                  <linearGradient id="gradIncome" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={C.income} stopOpacity={0.35}/>
+                    <stop offset="95%" stopColor={C.income} stopOpacity={0.02}/>
+                  </linearGradient>
+                  <linearGradient id="gradExpense" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={C.expense} stopOpacity={0.35}/>
+                    <stop offset="95%" stopColor={C.expense} stopOpacity={0.02}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                <XAxis dataKey="month" tick={{ fontSize:11, fill:C.textMuted }} axisLine={{stroke:C.border}} tickLine={false}/>
+                <YAxis tick={{ fontSize:10, fill:C.textMuted }} axisLine={false} tickLine={false}
+                  tickFormatter={(v)=> v>=10000 ? `${Math.round(v/10000)}만` : v}/>
+                <Tooltip formatter={(v)=>`${fmt(v)}원`}
+                  contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
+                <Area type="monotone" dataKey="수입" stroke={C.income} fill="url(#gradIncome)" strokeWidth={2}/>
+                <Area type="monotone" dataKey="지출" stroke={C.expense} fill="url(#gradExpense)" strokeWidth={2}/>
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         ) : (
           <div>
             <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:14 }}>
-              {catTrendData.map(c=>(
-                <button key={c.name} onClick={()=>{ toggleCat(c.name); setHoveredCat(null); }}
-                  style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${selectedCats.includes(c.name)?c.color:C.border}`, background:selectedCats.includes(c.name)?c.color+"22":"transparent", color:selectedCats.includes(c.name)?c.color:C.textMuted, fontSize:11, cursor:"pointer" }}>
-                  {c.icon} {c.name}
-                </button>
-              ))}
+              {categoryTrend.categories.map(name=>{
+                const info = getCat(name, allCategories);
+                return (
+                  <button key={name} onClick={()=>toggleCat(name)}
+                    style={{ padding:"4px 10px", borderRadius:20, border:`1px solid ${selectedCats.includes(name)?(info.color||C.accent):C.border}`, background:selectedCats.includes(name)?(info.color||C.accent)+"22":"transparent", color:selectedCats.includes(name)?(info.color||C.accent):C.textMuted, fontSize:11, cursor:"pointer" }}>
+                    {info.icon} {name}
+                  </button>
+                );
+              })}
             </div>
-            {catTrendData.filter(c=>selectedCats.includes(c.name)).map(c=>{
-              const catMax = Math.max(...c.amounts,1);
-              return (
-                <div key={c.name} style={{ marginBottom:16 }}>
-                  <span style={{ color:c.color, fontSize:11, fontWeight:600 }}>{c.icon} {c.name}</span>
-                  <div style={{ display:"flex", gap:4, marginTop:6 }}>
-                    <div style={{ display:"flex", flexDirection:"column", justifyContent:"space-between", height:58, width:30, flexShrink:0, paddingBottom:14 }}>
-                      {[catMax,Math.round(catMax/2),0].map((v,j)=>(
-                        <span key={j} style={{ color:C.textMuted, fontSize:8, textAlign:"right" }}>{v>=10000?`${Math.round(v/10000)}만`:v>0?`${Math.round(v/1000)}k`:"0"}</span>
-                      ))}
-                    </div>
-                    <div style={{ flex:1, display:"flex", alignItems:"flex-end", gap:3, height:58 }}>
-                      {c.amounts.map((a,i)=>{
-                        const bH = Math.max(Math.round((a/catMax)*44),a>0?4:0);
-                        const isAct = hoveredCat?.cat===c.name && hoveredCat?.i===i;
-                        const isCurr = i===c.amounts.length-1;
-                        return (
-                          <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2, position:"relative" }}>
-                            {isAct && a>0 && <div style={{ position:"absolute", bottom:bH+16, left:"50%", transform:"translateX(-50%)", background:c.color, color:"#fff", fontSize:8, fontWeight:700, padding:"2px 4px", borderRadius:4, whiteSpace:"nowrap", zIndex:20, fontFamily:"'DM Mono',monospace", pointerEvents:"none" }}>{a>=10000?`${Math.round(a/10000)}만`:`${Math.round(a/1000)}k`}</div>}
-                            <div onClick={()=>setHoveredCat(isAct?null:{cat:c.name,i,amount:a})}
-                              style={{ width:"100%", height:bH, background:c.color, borderRadius:"3px 3px 0 0", opacity:isAct?1:isCurr?0.9:0.4, cursor:"pointer" }} />
-                            <span style={{ color:isCurr?C.accent:C.textMuted, fontSize:9, fontWeight:isCurr?700:400 }}>{trendData.months[i]}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            <div style={{ width:"100%", height:220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={categoryTrend.data} margin={{ top:8, right:8, left:-12, bottom:0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                  <XAxis dataKey="month" tick={{ fontSize:11, fill:C.textMuted }} axisLine={{stroke:C.border}} tickLine={false}/>
+                  <YAxis tick={{ fontSize:10, fill:C.textMuted }} axisLine={false} tickLine={false}
+                    tickFormatter={(v)=> v>=10000 ? `${Math.round(v/10000)}만` : v}/>
+                  <Tooltip formatter={(v)=>`${fmt(v)}원`}
+                    contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
+                  {categoryTrend.categories.filter(c=>selectedCats.includes(c)).map(name=>{
+                    const info = getCat(name, allCategories);
+                    return <Line key={name} type="monotone" dataKey={name} stroke={info.color||C.accent} strokeWidth={2} dot={{r:3}}/>;
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
       </div>
