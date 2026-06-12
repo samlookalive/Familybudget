@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.8.0";
+const APP_VERSION = "1.8.1";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -177,6 +177,21 @@ const fmtDate = (d) => { try { const [,m,day]=d.split("-"); return `${m}/${day}`
 const uid     = () => "tx_" + Math.random().toString(36).slice(2,10);
 const today   = () => new Date().toISOString().split("T")[0];
 
+// 이번 달(YYYY-MM) 거래만 필터링. 묶음 항목은 children도 이번 달만 남기고, 합계/건수 재계산
+const filterCurrentMonth = (transactions) => {
+  const ym = new Date().toISOString().slice(0,7);
+  return transactions
+    .map(tx => {
+      if (tx.is_group) {
+        const kids = (tx.children||[]).filter(c => c.date?.startsWith(ym));
+        if (kids.length === 0) return null;
+        return { ...tx, children: kids, amount: kids.reduce((s,c)=>s+c.amount,0), child_count: kids.length };
+      }
+      return tx.date?.startsWith(ym) ? tx : null;
+    })
+    .filter(Boolean);
+};
+
 // ── 색상 팔레트 ───────────────────────────────────────────────
 const C = {
   bg:"#F5F6FA", surface:"#FFFFFF", surfaceHigh:"#F0F1F5", border:"#E2E4EC",
@@ -246,9 +261,10 @@ function calcTrend(transactions) {
 // ══════════════════════════════════════════════════════════════
 function HomeScreen() {
   const { transactions, recurring, budgets, profile } = useApp();
-  const summary  = calcSummary(transactions);
-  const catStats = calcCategoryStats(transactions);
-  const { fixed, variable } = calcFixedVariable(transactions, recurring);
+  const monthTx  = filterCurrentMonth(transactions);
+  const summary  = calcSummary(monthTx);
+  const catStats = calcCategoryStats(monthTx);
+  const { fixed, variable } = calcFixedVariable(monthTx, recurring);
   const pct = summary.income > 0 ? Math.round((summary.expense/summary.income)*100) : 0;
   const [familyName, setFamilyName] = useState("우리집");
 
@@ -266,7 +282,7 @@ function HomeScreen() {
   const [catDrillDown, setCatDrillDown] = useState(null); // null | "식비" | "교통" 등
 
   const FIXED_CATS  = ["월세","보험","구독","월세/관리비","구독서비스","통신비","교육"];
-  const flat = transactions.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense");
+  const flat = monthTx.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense");
   const fixedItems    = flat.filter(t=>FIXED_CATS.some(fc=>t.category===fc||t.category.includes(fc)||fc.includes(t.category)));
   const variableItems = flat.filter(t=>!FIXED_CATS.some(fc=>t.category===fc||t.category.includes(fc)||fc.includes(t.category)));
 
@@ -487,7 +503,7 @@ function HomeScreen() {
         const now = new Date();
         const monthLabel = `${now.getMonth()+1}월`;
         const cat = getCat(catDrillDown);
-        const catItems = transactions
+        const catItems = monthTx
           .flatMap(t => t.is_group ? t.children : [t])
           .filter(t => t.type==="expense" && t.category===catDrillDown);
         const total = catItems.reduce((s,t)=>s+t.amount, 0);
@@ -1723,10 +1739,11 @@ function StatsScreen() {
   const [hoveredBar,   setHoveredBar]   = useState(null);
   const [hoveredCat,   setHoveredCat]   = useState(null);
 
-  const summary    = calcSummary(transactions);
-  const catStats   = calcCategoryStats(transactions);
-  const { fixed, variable } = calcFixedVariable(transactions, []);
-  const trendData  = calcTrend(transactions);
+  const monthTx    = filterCurrentMonth(transactions);
+  const summary    = calcSummary(monthTx);
+  const catStats   = calcCategoryStats(monthTx);
+  const { fixed, variable } = calcFixedVariable(monthTx, []);
+  const trendData  = calcTrend(monthTx);
 
   const CAT_TREND_COLORS = { 식비:"#E8834A", "월세/관리비":"#6C8EBF", 교통:"#7C9EFF", 구독서비스:"#A78BFA", 여행:"#34D399", "의료/건강":"#F87171", 쇼핑:"#FBBF24", "생활/마트":"#60A5FA", "문화/여가":"#C084FC" };
   const catTrendData = catStats.map(c=>({ name:c.category, icon:c.icon, color:CAT_TREND_COLORS[c.category]||C.accent, amounts:[...TREND_HISTORY.expense.map(()=>0), c.amount] }));
