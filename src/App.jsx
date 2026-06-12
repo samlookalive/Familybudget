@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.9.1";
+const APP_VERSION = "1.10.1";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -886,7 +886,7 @@ const GROUP_IMAGE_PROMPT = `당신은 카드/결제 내역 이미지에서 묶�
 날짜 없으면 오늘(${today()}) 사용. 금액은 원화 숫자만.`;
 
 function InputScreen() {
-  const { addTransactions, setActiveTab, profile, token } = useApp();
+  const { addTransactions, setActiveTab, profile, token, allCategories } = useApp();
 
   // ── 탭 ─────────────────────────────────────────────────────
   const [inputTab, setInputTab] = useState("single"); // single | group
@@ -1284,16 +1284,14 @@ function InputScreen() {
                 <div style={{padding:"10px 0",borderBottom:`1px solid ${C.border}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <span style={{color:C.textMuted,fontSize:13}}>카테고리</span>
-                    <span style={{color:C.text,fontSize:13,fontWeight:600}}>{parsed.icon} {parsed.category}</span>
                   </div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                    {Object.entries(CAT_ICON_MAP).map(([cat,icon])=>(
-                      <button key={cat} onClick={()=>setParsed(p=>({...p,category:cat,icon}))}
-                        style={{padding:"4px 10px",borderRadius:16,border:`1px solid ${parsed.category===cat?C.accent:C.border}`,background:parsed.category===cat?C.accentSoft:"transparent",color:parsed.category===cat?C.accent:C.textMuted,fontSize:11,cursor:"pointer"}}>
-                        {icon} {cat}
-                      </button>
+                  <select value={parsed.category}
+                    onChange={e=>{ const c=allCategories.find(c=>c.name===e.target.value); setParsed(p=>({...p,category:e.target.value,icon:c?.icon||"📦"})); }}
+                    style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14,boxSizing:"border-box"}}>
+                    {allCategories.filter(c=>c.type===parsed.type).map(c=>(
+                      <option key={c.id} value={c.name}>{c.icon} {c.name}</option>
                     ))}
-                  </div>
+                  </select>
                 </div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.border}`,gap:12}}>
                   <span style={{color:C.textMuted,fontSize:13,flexShrink:0}}>사용처</span>
@@ -1337,7 +1335,7 @@ function InputScreen() {
                         {checkedIdx.includes(i)&&<span style={{color:"#fff",fontSize:12,fontWeight:700}}>✓</span>}
                       </div>
                       <div onClick={()=>setEditingImgIdx(isEO?null:i)} style={{flex:1,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-                        <div style={{width:34,height:34,borderRadius:9,background:(CATEGORIES[item.category]?.color||C.accent)+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{item.icon}</div>
+                        <div style={{width:34,height:34,borderRadius:9,background:(getCat(item.category,allCategories).color||C.accent)+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{item.icon}</div>
                         <div style={{flex:1,minWidth:0}}>
                           <p style={{color:C.text,fontSize:13,fontWeight:500,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.memo}</p>
                           <p style={{color:C.textMuted,fontSize:10,margin:0}}>{item.date} · {item.category}</p>
@@ -1362,13 +1360,13 @@ function InputScreen() {
                           <input type="text" value={item.memo} onChange={e=>setParsedList(l=>l.map((x,j)=>j===i?{...x,memo:e.target.value}:x))}
                             style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",color:C.text,fontSize:13,boxSizing:"border-box"}}/></div>
                         <div><p style={{color:C.textMuted,fontSize:11,margin:"0 0 5px"}}>카테고리</p>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                            {Object.entries(CAT_ICON_MAP).map(([cat,icon])=>(
-                              <button key={cat} onClick={()=>setParsedList(l=>l.map((x,j)=>j===i?{...x,category:cat,icon}:x))}
-                                style={{padding:"3px 9px",borderRadius:14,border:`1px solid ${item.category===cat?C.accent:C.border}`,background:item.category===cat?C.accentSoft:"transparent",color:item.category===cat?C.accent:C.textMuted,fontSize:10,cursor:"pointer"}}>
-                                {icon} {cat}
-                              </button>
-                            ))}</div></div>
+                          <select value={item.category}
+                            onChange={e=>{ const c=allCategories.find(c=>c.name===e.target.value); setParsedList(l=>l.map((x,j)=>j===i?{...x,category:e.target.value,icon:c?.icon||"📦"}:x)); }}
+                            style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",color:C.text,fontSize:12,boxSizing:"border-box"}}>
+                            {allCategories.filter(c=>c.type===item.type).map(c=>(
+                              <option key={c.id} value={c.name}>{c.icon} {c.name}</option>
+                            ))}
+                          </select></div>
                       </div>
                     )}
                   </div>
@@ -1402,7 +1400,7 @@ function InputScreen() {
                   </div>
                   <div style={{display:"flex",gap:8,marginBottom:12}}>
                     {["expense","income"].map(t=>(
-                      <button key={t} onClick={()=>setManualSingleForm(f=>({...f,type:t}))}
+                      <button key={t} onClick={()=>setManualSingleForm(f=>({...f,type:t,category:allCategories.find(c=>c.type===t)?.name||""}))}
                         style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${manualSingleForm.type===t?(t==="income"?C.income:C.expense):C.border}`,background:manualSingleForm.type===t?(t==="income"?C.income+"22":C.expense+"22"):"transparent",color:manualSingleForm.type===t?(t==="income"?C.income:C.expense):C.textMuted,fontSize:13,fontWeight:600,cursor:"pointer"}}>
                         {t==="expense"?"💸 지출":"💰 수입"}
                       </button>
@@ -1423,14 +1421,13 @@ function InputScreen() {
                   </div>
                   <div style={{marginBottom:10}}>
                     <p style={{color:C.textMuted,fontSize:11,margin:"0 0 6px"}}>카테고리</p>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                      {Object.entries(CAT_ICON_MAP).map(([cat,icon])=>(
-                        <button key={cat} onClick={()=>setManualSingleForm(f=>({...f,category:cat}))}
-                          style={{padding:"5px 11px",borderRadius:16,border:`1px solid ${manualSingleForm.category===cat?C.accent:C.border}`,background:manualSingleForm.category===cat?C.accentSoft:"transparent",color:manualSingleForm.category===cat?C.accent:C.textMuted,fontSize:12,cursor:"pointer"}}>
-                          {icon} {cat}
-                        </button>
+                    <select value={manualSingleForm.category} onChange={e=>setManualSingleForm(f=>({...f,category:e.target.value}))}
+                      style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14,boxSizing:"border-box"}}>
+                      <option value="">선택</option>
+                      {allCategories.filter(c=>c.type===manualSingleForm.type).map(c=>(
+                        <option key={c.id} value={c.name}>{c.icon} {c.name}</option>
                       ))}
-                    </div>
+                    </select>
                   </div>
                   <div style={{marginBottom:16}}>
                     <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>날짜</p>
