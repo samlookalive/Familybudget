@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.8.2";
+const APP_VERSION = "1.8.3";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2209,9 +2209,40 @@ function AIRulesTab() {
 
 // ── 가족 정보 카드 (설정 화면용) ─────────────────────────────
 function SettingsScreen() {
-  const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets } = useApp();
+  const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets, profile, token } = useApp();
   const [settingTab, setSettingTab] = useState("recurring");
   const [categories, setCategories] = useState(INIT_CATEGORIES);
+  const [catLoading, setCatLoading] = useState(true);
+
+  // DB에서 카테고리 로드 → INIT_CATEGORIES와 동일한 트리 구조로 변환
+  useEffect(() => {
+    const loadCategories = async () => {
+      const tok = localStorage.getItem("sb_token");
+      const fid = profile?.family_id;
+      if (!tok || !fid) { setCatLoading(false); return; }
+      try {
+        const rows = await sb.select("categories", `family_id=eq.${fid}&order=sort_order.asc`, tok);
+        if (!rows?.length) { setCatLoading(false); return; }
+
+        const parents = rows.filter(r => r.is_parent);
+        const buildTree = (type) => parents
+          .filter(p => p.type === type)
+          .map(p => ({
+            id: p.id, name: p.name, icon: p.icon, color: p.color, isParent: true,
+            children: rows
+              .filter(c => !c.is_parent && c.parent_id === p.id)
+              .sort((a,b) => (a.sort_order||0)-(b.sort_order||0))
+              .map(c => ({ id: c.id, name: c.name, icon: c.icon, color: c.color })),
+          }));
+
+        setCategories({ expense: buildTree("expense"), income: buildTree("income") });
+      } catch(e) {
+        console.log("카테고리 로드 실패, 기본값 사용:", e.message);
+      }
+      setCatLoading(false);
+    };
+    loadCategories();
+  }, [profile?.family_id]);
 
   // 카테고리 관리 state
   const [catType,       setCatType]       = useState("expense");
@@ -2224,8 +2255,7 @@ function SettingsScreen() {
   const [migrateTo,     setMigrateTo]     = useState("기타"); // 이전 대상 카테고리명
 
   // 수정 저장 — 이름 변경 시 기존 거래도 자동 반영
-  const saveCatEdit = () => {
-    const oldName = deleteConfirm?.oldName; // 혹시 모를 충돌 방지
+  const saveCatEdit = async () => {
     // 현재 편집 중인 카테고리의 원래 이름 찾기
     let origName = "";
     categories[catType].forEach(g => {
@@ -2246,7 +2276,7 @@ function SettingsScreen() {
       return { ...prev, [catType]: groups };
     });
 
-    // 2) 이름이 바뀐 경우 → 기존 거래 category 자동 반영
+    // 2) 이름이 바뀐 경우 → 기존 거래 category 자동 반영 (로컬 + DB)
     if (origName && origName !== editForm.name) {
       setTransactions(prev => prev.map(tx => {
         if (tx.is_group) {
@@ -2258,16 +2288,32 @@ function SettingsScreen() {
         }
         return tx.category === origName ? { ...tx, category: editForm.name } : tx;
       }));
+
+      const tok = localStorage.getItem("sb_token");
+      const fid = profile?.family_id;
+      if (tok && fid) {
+        try {
+          await sb.update("transactions", { category: editForm.name }, { category: origName, family_id: fid }, tok);
+        } catch(e) { console.log("거래 카테고리명 동기화 실패:", e.message); }
+      }
+    }
+
+    // 3) DB 카테고리 업데이트
+    const tok = localStorage.getItem("sb_token");
+    if (tok && editingCat?.catId) {
+      try {
+        await sb.update("categories", { name: editForm.name, icon: editForm.icon, color: editForm.color }, { id: editingCat.catId }, tok);
+      } catch(e) { console.log("카테고리 수정 DB 반영 실패:", e.message); }
     }
 
     setEditingCat(null);
   };
 
   // 삭제 — 이전 카테고리 선택 후 일괄 변경
-  const execDelete = () => {
+  const execDelete = async () => {
     const { groupId, catId, oldName } = deleteConfirm;
 
-    // 1) 기존 거래 일괄 이전
+    // 1) 기존 거래 일괄 이전 (로컬 + DB)
     setTransactions(prev => prev.map(tx => {
       if (tx.is_group) {
         return {
@@ -2279,7 +2325,15 @@ function SettingsScreen() {
       return tx.category === oldName ? { ...tx, category: migrateTo } : tx;
     }));
 
-    // 2) 카테고리 목록에서 제거
+    const tok = localStorage.getItem("sb_token");
+    const fid = profile?.family_id;
+    if (tok && fid) {
+      try {
+        await sb.update("transactions", { category: migrateTo }, { category: oldName, family_id: fid }, tok);
+      } catch(e) { console.log("거래 이전 DB 반영 실패:", e.message); }
+    }
+
+    // 2) 카테고리 목록에서 제거 (로컬 + DB)
     setCategories(prev => {
       const groups = prev[catType].map(g => {
         if (g.id !== groupId) return g;
@@ -2288,8 +2342,11 @@ function SettingsScreen() {
       return { ...prev, [catType]: groups };
     });
 
-    // 해당 카테고리 사용 거래 수 계산 (알림용)
-    const affectedCount = transactions.flatMap(t => t.is_group ? t.children : [t])
+    if (tok && catId) {
+      try {
+        await sb.delete("categories", { id: catId }, tok);
+      } catch(e) { console.log("카테고리 삭제 DB 반영 실패:", e.message); }
+    }
 
     setDeleteConfirm(null);
     setEditingCat(null);
@@ -2297,12 +2354,30 @@ function SettingsScreen() {
   };
 
   // 카테고리 추가
-  const addCat = (groupId) => {
+  const addCat = async (groupId) => {
     if (!newCatForm.name.trim()) return;
+    const tok = localStorage.getItem("sb_token");
+    const fid = profile?.family_id;
+    let newId = "c"+Date.now();
+
+    if (tok && fid) {
+      try {
+        const group = categories[catType].find(g => g.id === groupId);
+        const nextOrder = (group?.children.length || 0) + 1;
+        const inserted = await sb.insert("categories", {
+          family_id: fid, parent_id: groupId, is_parent: false,
+          name: newCatForm.name, type: catType,
+          icon: newCatForm.icon, color: newCatForm.color,
+          is_active: true, sort_order: nextOrder,
+        }, tok);
+        if (inserted?.[0]?.id) newId = inserted[0].id;
+      } catch(e) { console.log("카테고리 추가 DB 반영 실패:", e.message); }
+    }
+
     setCategories(prev => {
       const groups = prev[catType].map(g => {
         if (g.id !== groupId) return g;
-        return { ...g, children: [...g.children, { id:"c"+Date.now(), ...newCatForm }] };
+        return { ...g, children: [...g.children, { id:newId, ...newCatForm }] };
       });
       return { ...prev, [catType]: groups };
     });
