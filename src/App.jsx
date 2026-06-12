@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.8.1";
+const APP_VERSION = "1.8.2";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -597,6 +597,15 @@ function TransactionsScreen() {
       return tx;
     }));
     setEditingId(null);
+
+    // DB도 업데이트
+    const tok = localStorage.getItem("sb_token");
+    if (tok) {
+      sb.update("transactions", {
+        amount: Number(editForm.amount), memo: editForm.memo,
+        date: editForm.date, category: editForm.category,
+      }, { id }, tok).catch(()=>{});
+    }
   };
 
   const requestDelete = (id, isChild, parentId, memo) => setDeleteTarget({ id, isChild, parentId, memo });
@@ -612,6 +621,12 @@ function TransactionsScreen() {
       return prev.filter(tx=>tx.id!==id);
     });
     setEditingId(null); setDeleteTarget(null);
+
+    // DB에서도 삭제
+    const tok = localStorage.getItem("sb_token");
+    if (tok) {
+      sb.delete("transactions", { id }, tok).catch(()=>{});
+    }
   };
 
   const filtered = transactions.filter(tx=>{
