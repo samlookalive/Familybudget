@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.1";
+const APP_VERSION = "1.10.4";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1555,7 +1555,7 @@ function InputScreen() {
                 {groupParsed.children.map((child,i)=>(
                   <div key={i} style={{background:C.surfaceHigh,borderRadius:10,padding:"10px 12px",marginBottom:8}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                      <span style={{fontSize:16}}>{CAT_ICON_MAP[child.category]||"📦"}</span>
+                      <span style={{fontSize:16}}>{getCat(child.category,allCategories).icon}</span>
                       <input value={child.memo} onChange={e=>setGroupParsed(p=>({...p,children:p.children.map((c,j)=>j===i?{...c,memo:e.target.value}:c)}))}
                         style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:"6px 10px",color:C.text,fontSize:13,boxSizing:"border-box"}}/>
                       <button onClick={()=>setGroupParsed(p=>({...p,children:p.children.filter((_,j)=>j!==i)}))}
@@ -1568,7 +1568,7 @@ function InputScreen() {
                       </div>
                       <select value={child.category} onChange={e=>setGroupParsed(p=>({...p,children:p.children.map((c,j)=>j===i?{...c,category:e.target.value}:c)}))}
                         style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,padding:"6px 8px",color:C.text,fontSize:12,boxSizing:"border-box"}}>
-                        {Object.entries(CAT_ICON_MAP).map(([cat,icon])=><option key={cat} value={cat}>{icon} {cat}</option>)}
+                        {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
                       </select>
                     </div>
                   </div>
@@ -1688,7 +1688,7 @@ function InputScreen() {
                       <p style={{color:C.textMuted,fontSize:11,margin:"0 0 5px"}}>카테고리</p>
                       <select value={manualCat} onChange={e=>setManualCat(e.target.value)}
                         style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:13,boxSizing:"border-box"}}>
-                        {Object.entries(CAT_ICON_MAP).map(([cat,icon])=><option key={cat} value={cat}>{icon} {cat}</option>)}
+                        {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
                       </select>
                     </div>
                     <div>
@@ -1736,7 +1736,7 @@ function InputScreen() {
                             setManualChildren(p=>p.map((c,j)=>j===i?{...c,category:val}:c));
                           }}
                           style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%"}}>
-                          {Object.entries(CAT_ICON_MAP).map(([cat,icon])=><option key={cat} value={cat}>{icon} {cat}</option>)}
+                          {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
                         </select>
                       </div>
                     </div>
@@ -2318,23 +2318,64 @@ function SettingsScreen() {
     setRecEditForm({ name:item.name, amount:item.amount||item.last_amount||"", day_of_month:item.day_of_month, amount_type:item.amount_type, icon:item.icon });
   };
   const saveRecEdit = (id) => {
-    setRecurring(prev=>prev.map(i=>i.id!==id?i:{ ...i, name:recEditForm.name, day_of_month:Number(recEditForm.day_of_month), amount_type:recEditForm.amount_type, icon:recEditForm.icon,
-      amount:recEditForm.amount_type==="fixed"?Number(recEditForm.amount):null, last_amount:recEditForm.amount_type==="variable"?Number(recEditForm.amount):i.last_amount }));
+    const updated = { name:recEditForm.name, day_of_month:Number(recEditForm.day_of_month), amount_type:recEditForm.amount_type, icon:recEditForm.icon,
+      amount:recEditForm.amount_type==="fixed"?Number(recEditForm.amount):null };
+    setRecurring(prev=>prev.map(i=>i.id!==id?i:{ ...i, ...updated,
+      last_amount:recEditForm.amount_type==="variable"?Number(recEditForm.amount):i.last_amount }));
     setExpandedId(null);
+
+    const tok = localStorage.getItem("sb_token");
+    if (tok) {
+      const dbUpdate = {...updated};
+      if (recEditForm.amount_type==="variable") dbUpdate.last_amount = Number(recEditForm.amount);
+      sb.update("recurring_transactions", dbUpdate, { id }, tok).catch(e=>console.log("정기지출 수정 DB 반영 실패:", e.message));
+    }
   };
-  const toggleActive = (id) => setRecurring(prev=>prev.map(i=>i.id!==id?i:{...i,is_active:!i.is_active,status:i.is_active?"inactive":i.amount_type==="variable"?"need_input":"pending_date"}));
+  const toggleActive = (id) => {
+    let newActive, newStatus;
+    setRecurring(prev=>prev.map(i=>{
+      if (i.id!==id) return i;
+      newActive = !i.is_active;
+      newStatus = i.is_active ? "inactive" : (i.amount_type==="variable" ? "need_input" : "pending_date");
+      return {...i, is_active:newActive, status:newStatus};
+    }));
+    const tok = localStorage.getItem("sb_token");
+    if (tok) {
+      sb.update("recurring_transactions", { is_active:newActive, status:newStatus }, { id }, tok).catch(e=>console.log("정기지출 토글 DB 반영 실패:", e.message));
+    }
+  };
   const submitConfirm = () => {
     const amount = Number(confirmAmt);
     addTransactions([{ id:uid(), type:"expense", amount, memo:confirmItem.name, date:today(), category:confirmItem.category, is_group:false, from_recurring:true }]);
     setRecurring(prev=>prev.map(i=>i.id===confirmItem.id?{...i,status:"registered",last_amount:amount}:i));
+
+    const tok = localStorage.getItem("sb_token");
+    if (tok) {
+      sb.update("recurring_transactions", { status:"registered", last_amount:amount }, { id:confirmItem.id }, tok).catch(e=>console.log("정기지출 확정 DB 반영 실패:", e.message));
+    }
     setConfirmItem(null); setConfirmAmt("");
   };
   const [newRec, setNewRec] = useState({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱" });
-  const addRec = () => {
+  const addRec = async () => {
     if (!newRec.name) return;
-    setRecurring(prev=>[...prev,{ id:"r"+Date.now(), ...newRec, amount:newRec.amount_type==="fixed"?Number(newRec.amount):null,
+    const base = { ...newRec, amount:newRec.amount_type==="fixed"?Number(newRec.amount):null,
       day_of_month:Number(newRec.day_of_month), is_active:true, auto_register:newRec.amount_type==="fixed",
-      status:newRec.amount_type==="variable"?"need_input":"pending_date", last_amount:newRec.amount_type==="variable"?Number(newRec.amount):undefined }]);
+      status:newRec.amount_type==="variable"?"need_input":"pending_date", last_amount:newRec.amount_type==="variable"?Number(newRec.amount):undefined };
+
+    let newId = "r"+Date.now();
+    const tok = localStorage.getItem("sb_token");
+    const fid = profile?.family_id;
+    if (tok && fid) {
+      try {
+        const dbRow = { family_id:fid, name:base.name, amount:base.amount, amount_type:base.amount_type,
+          day_of_month:base.day_of_month, category:base.category, icon:base.icon,
+          is_active:true, auto_register:base.auto_register, status:base.status, last_amount:base.last_amount ?? null };
+        const inserted = await sb.insert("recurring_transactions", dbRow, tok);
+        if (inserted?.[0]?.id) newId = inserted[0].id;
+      } catch(e) { console.log("정기지출 추가 DB 반영 실패:", e.message); }
+    }
+
+    setRecurring(prev=>[...prev, { id:newId, ...base }]);
     setShowAdd(false); setNewRec({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱" });
   };
   const StatusBadge = ({ status }) => {
@@ -2634,7 +2675,7 @@ function SettingsScreen() {
           {/* 카테고리별 예산 */}
           <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", textTransform:"uppercase", letterSpacing:0.8, fontWeight:600 }}>카테고리별 예산</p>
           <div style={{ background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, overflow:"hidden", marginBottom:20 }}>
-            {[...INIT_CATEGORIES.expense, ...INIT_CATEGORIES.income].flatMap(g=>g.children).map((cat,i,arr)=>{
+            {[...categories.expense, ...categories.income].flatMap(g=>g.children).map((cat,i,arr)=>{
               const val = budgets.categories[cat.name]||"";
               return (
                 <div key={cat.id} style={{ display:"flex", alignItems:"center", padding:"13px 16px", borderBottom: i<arr.length-1?`1px solid ${C.border}`:"none", gap:12 }}>
