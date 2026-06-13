@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.5";
+const APP_VERSION = "1.10.6";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2111,7 +2111,84 @@ function AIRulesTab() {
   );
 }
 
-// ── 가족 정보 카드 (설정 화면용) ─────────────────────────────
+// ── 정기지출 항목 (설정 화면용) ─────────────────────────────
+function RecRow({ item, expandedId, recEditForm, setRecEditForm, monthLabel, ICONS_REC, startRecEdit, saveRecEdit, toggleActive, setExpandedId, allCategories }) {
+  const isExp = expandedId===item.id;
+  const STATUS_MAP = { registered:{label:"등록완료",color:C.income}, pending_date:{label:"자동예정",color:C.accent}, need_input:{label:"금액확인필요",color:C.expense}, inactive:{label:"비활성",color:C.textMuted} };
+  const statusInfo = STATUS_MAP[item.status] || STATUS_MAP.inactive;
+  return (
+    <div style={{ borderBottom:`1px solid ${C.border}` }}>
+      <div onClick={()=>startRecEdit(item)} style={{ padding:"14px 16px", display:"flex", alignItems:"center", gap:12, opacity:item.is_active?1:0.5, cursor:"pointer", background:isExp?C.accentSoft:"transparent" }}>
+        <div style={{ width:38, height:38, borderRadius:10, background:C.surfaceHigh, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{item.icon}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+            <span style={{ color:C.text, fontSize:14, fontWeight:500 }}>{item.name}</span>
+            <Tag color={statusInfo.color}>{statusInfo.label}</Tag>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <span style={{ color:C.textMuted, fontSize:11 }}>매달 {item.day_of_month}일</span>
+            {item.amount_type==="variable" && <span style={{ color:C.textMuted, fontSize:11 }}>· 지난달 {fmt(item.last_amount||0)}원</span>}
+          </div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          {item.amount_type==="fixed" ? <span style={{ color:C.expense, fontSize:14, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{fmt(item.amount)}원</span> : <span style={{ color:C.textMuted, fontSize:13 }}>변동</span>}
+          <span style={{ color:C.textMuted, fontSize:16, transition:"transform 0.2s", display:"inline-block", transform:isExp?"rotate(90deg)":"rotate(0deg)" }}>›</span>
+        </div>
+      </div>
+      {isExp && (
+        <div onClick={e=>e.stopPropagation()} style={{ background:C.surfaceHigh, padding:"14px 16px 16px", borderTop:`1px solid ${C.border}` }}>
+          <p style={{ color:C.accent, fontSize:11, fontWeight:600, margin:"0 0 12px" }}>✏️ {monthLabel} 반영 기준으로 수정</p>
+          <div style={{ marginBottom:10 }}>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px" }}>아이콘</p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {ICONS_REC.map(ic=><button key={ic} onClick={()=>setRecEditForm(f=>({...f,icon:ic}))} style={{ width:34, height:34, borderRadius:8, border:`1px solid ${recEditForm.icon===ic?C.accent:C.border}`, background:recEditForm.icon===ic?C.accentSoft:C.surface, fontSize:16, cursor:"pointer" }}>{ic}</button>)}
+            </div>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>항목명</p>
+            <input value={recEditForm.name} onChange={e=>setRecEditForm(f=>({...f,name:e.target.value}))} style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>금액 유형</p>
+            <div style={{ display:"flex", gap:6 }}>
+              {[{v:"fixed",label:"고정"},{v:"variable",label:"변동"}].map(o=>(
+                <button key={o.v} onClick={()=>setRecEditForm(f=>({...f,amount_type:o.v}))} style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${recEditForm.amount_type===o.v?C.accent:C.border}`, background:recEditForm.amount_type===o.v?C.accentSoft:"transparent", color:recEditForm.amount_type===o.v?C.accent:C.textMuted, fontSize:12, cursor:"pointer" }}>{o.label}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>카테고리</p>
+            <select value={recEditForm.category} onChange={e=>setRecEditForm(f=>({...f,category:e.target.value}))}
+              style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box" }}>
+              <option value="">선택안함</option>
+              {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+            </select>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8, marginBottom:14 }}>
+            <div>
+              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>{recEditForm.amount_type==="fixed"?"금액":"지난달 금액"}</p>
+              <input type="number" value={recEditForm.amount} onChange={e=>setRecEditForm(f=>({...f,amount:e.target.value}))} placeholder="0" style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box", fontFamily:"'DM Mono',monospace" }} />
+            </div>
+            <div>
+              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>결제일</p>
+              <div style={{ display:"flex", alignItems:"center", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px" }}>
+                <input type="number" min="1" max="31" value={recEditForm.day_of_month} onChange={e=>setRecEditForm(f=>({...f,day_of_month:e.target.value}))} style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace" }} />
+                <span style={{ color:C.textMuted, fontSize:12 }}>일</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={e=>{e.stopPropagation();toggleActive(item.id);setExpandedId(null);}} style={{ padding:"9px 14px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>{item.is_active?"비활성화":"활성화"}</button>
+            <button onClick={e=>{e.stopPropagation();setExpandedId(null);}} style={{ flex:1, padding:"9px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
+            <button onClick={e=>{e.stopPropagation();saveRecEdit(item.id);}} style={{ flex:2, padding:"9px", borderRadius:9, border:"none", background:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>저장</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function SettingsScreen() {
   const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets, profile, token, allCategories } = useApp();
   const [settingTab, setSettingTab] = useState("recurring");
@@ -2378,84 +2455,7 @@ function SettingsScreen() {
     setRecurring(prev=>[...prev, { id:newId, ...base }]);
     setShowAdd(false); setNewRec({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱", category:"" });
   };
-  const StatusBadge = ({ status }) => {
-    const map = { registered:{label:"등록완료",color:C.income}, pending_date:{label:"자동예정",color:C.accent}, need_input:{label:"금액확인필요",color:C.expense}, inactive:{label:"비활성",color:C.textMuted} };
-    const s = map[status]||map.inactive;
-    return <Tag color={s.color}>{s.label}</Tag>;
-  };
-  const RecRow = ({ item }) => {
-    const isExp = expandedId===item.id;
-    return (
-      <div style={{ borderBottom:`1px solid ${C.border}` }}>
-        <div onClick={()=>startRecEdit(item)} style={{ padding:"14px 16px", display:"flex", alignItems:"center", gap:12, opacity:item.is_active?1:0.5, cursor:"pointer", background:isExp?C.accentSoft:"transparent" }}>
-          <div style={{ width:38, height:38, borderRadius:10, background:C.surfaceHigh, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{item.icon}</div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
-              <span style={{ color:C.text, fontSize:14, fontWeight:500 }}>{item.name}</span>
-              <StatusBadge status={item.status} />
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <span style={{ color:C.textMuted, fontSize:11 }}>매달 {item.day_of_month}일</span>
-              {item.amount_type==="variable" && <span style={{ color:C.textMuted, fontSize:11 }}>· 지난달 {fmt(item.last_amount||0)}원</span>}
-            </div>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            {item.amount_type==="fixed" ? <span style={{ color:C.expense, fontSize:14, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{fmt(item.amount)}원</span> : <span style={{ color:C.textMuted, fontSize:13 }}>변동</span>}
-            <span style={{ color:C.textMuted, fontSize:16, transition:"transform 0.2s", display:"inline-block", transform:isExp?"rotate(90deg)":"rotate(0deg)" }}>›</span>
-          </div>
-        </div>
-        {isExp && (
-          <div onClick={e=>e.stopPropagation()} style={{ background:C.surfaceHigh, padding:"14px 16px 16px", borderTop:`1px solid ${C.border}` }}>
-            <p style={{ color:C.accent, fontSize:11, fontWeight:600, margin:"0 0 12px" }}>✏️ {monthLabel} 반영 기준으로 수정</p>
-            <div style={{ marginBottom:10 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px" }}>아이콘</p>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                {ICONS_REC.map(ic=><button key={ic} onClick={()=>setRecEditForm(f=>({...f,icon:ic}))} style={{ width:34, height:34, borderRadius:8, border:`1px solid ${recEditForm.icon===ic?C.accent:C.border}`, background:recEditForm.icon===ic?C.accentSoft:C.surface, fontSize:16, cursor:"pointer" }}>{ic}</button>)}
-              </div>
-            </div>
-            <div style={{ marginBottom:10 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>항목명</p>
-              <input value={recEditForm.name} onChange={e=>setRecEditForm(f=>({...f,name:e.target.value}))} style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
-            </div>
-            <div style={{ marginBottom:10 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>금액 유형</p>
-              <div style={{ display:"flex", gap:6 }}>
-                {[{v:"fixed",label:"고정"},{v:"variable",label:"변동"}].map(o=>(
-                  <button key={o.v} onClick={()=>setRecEditForm(f=>({...f,amount_type:o.v}))} style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${recEditForm.amount_type===o.v?C.accent:C.border}`, background:recEditForm.amount_type===o.v?C.accentSoft:"transparent", color:recEditForm.amount_type===o.v?C.accent:C.textMuted, fontSize:12, cursor:"pointer" }}>{o.label}</button>
-                ))}
-              </div>
-            </div>
-            <div style={{ marginBottom:10 }}>
-              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>카테고리</p>
-              <select value={recEditForm.category} onChange={e=>setRecEditForm(f=>({...f,category:e.target.value}))}
-                style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box" }}>
-                <option value="">선택안함</option>
-                {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
-              </select>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8, marginBottom:14 }}>
-              <div>
-                <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>{recEditForm.amount_type==="fixed"?"금액":"지난달 금액"}</p>
-                <input type="number" value={recEditForm.amount} onChange={e=>setRecEditForm(f=>({...f,amount:e.target.value}))} placeholder="0" style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box", fontFamily:"'DM Mono',monospace" }} />
-              </div>
-              <div>
-                <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>결제일</p>
-                <div style={{ display:"flex", alignItems:"center", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px" }}>
-                  <input type="number" min="1" max="31" value={recEditForm.day_of_month} onChange={e=>setRecEditForm(f=>({...f,day_of_month:e.target.value}))} style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace" }} />
-                  <span style={{ color:C.textMuted, fontSize:12 }}>일</span>
-                </div>
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={e=>{e.stopPropagation();toggleActive(item.id);setExpandedId(null);}} style={{ padding:"9px 14px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>{item.is_active?"비활성화":"활성화"}</button>
-              <button onClick={e=>{e.stopPropagation();setExpandedId(null);}} style={{ flex:1, padding:"9px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
-              <button onClick={e=>{e.stopPropagation();saveRecEdit(item.id);}} style={{ flex:2, padding:"9px", borderRadius:9, border:"none", background:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>저장</button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
+  const recRowProps = { expandedId, recEditForm, setRecEditForm, monthLabel, ICONS_REC, startRecEdit, saveRecEdit, toggleActive, setExpandedId, allCategories };
 
   return (
     <div style={{ paddingBottom:110 }}>
@@ -2624,14 +2624,14 @@ function SettingsScreen() {
           {/* 활성 */}
           <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", textTransform:"uppercase", letterSpacing:0.8 }}>활성 항목 · 클릭하여 수정</p>
           <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, overflow:"hidden", marginBottom:16 }}>
-            {activeItems.map(item=><RecRow key={item.id} item={item} />)}
+            {activeItems.map(item=><RecRow key={item.id} item={item} {...recRowProps} />)}
           </div>
 
           {inactiveItems.length>0 && (
             <>
               <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 8px", textTransform:"uppercase", letterSpacing:0.8 }}>비활성 항목</p>
               <div style={{ background:C.surface, borderRadius:16, border:`1px solid ${C.border}`, overflow:"hidden" }}>
-                {inactiveItems.map(item=><RecRow key={item.id} item={item} />)}
+                {inactiveItems.map(item=><RecRow key={item.id} item={item} {...recRowProps} />)}
               </div>
             </>
           )}
