@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.4";
+const APP_VERSION = "1.10.5";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2113,7 +2113,7 @@ function AIRulesTab() {
 
 // ── 가족 정보 카드 (설정 화면용) ─────────────────────────────
 function SettingsScreen() {
-  const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets, profile, token } = useApp();
+  const { recurring, setRecurring, addTransactions, transactions, setTransactions, budgets, setBudgets, profile, token, allCategories } = useApp();
   const [settingTab, setSettingTab] = useState("recurring");
   const [categories, setCategories] = useState(INIT_CATEGORIES);
   const [catLoading, setCatLoading] = useState(true);
@@ -2315,10 +2315,10 @@ function SettingsScreen() {
   const startRecEdit  = (item) => {
     if (expandedId===item.id) { setExpandedId(null); return; }
     setExpandedId(item.id);
-    setRecEditForm({ name:item.name, amount:item.amount||item.last_amount||"", day_of_month:item.day_of_month, amount_type:item.amount_type, icon:item.icon });
+    setRecEditForm({ name:item.name, amount:item.amount||item.last_amount||"", day_of_month:item.day_of_month, amount_type:item.amount_type, icon:item.icon, category:item.category||"" });
   };
   const saveRecEdit = (id) => {
-    const updated = { name:recEditForm.name, day_of_month:Number(recEditForm.day_of_month), amount_type:recEditForm.amount_type, icon:recEditForm.icon,
+    const updated = { name:recEditForm.name, day_of_month:Number(recEditForm.day_of_month), amount_type:recEditForm.amount_type, icon:recEditForm.icon, category:recEditForm.category,
       amount:recEditForm.amount_type==="fixed"?Number(recEditForm.amount):null };
     setRecurring(prev=>prev.map(i=>i.id!==id?i:{ ...i, ...updated,
       last_amount:recEditForm.amount_type==="variable"?Number(recEditForm.amount):i.last_amount }));
@@ -2355,7 +2355,7 @@ function SettingsScreen() {
     }
     setConfirmItem(null); setConfirmAmt("");
   };
-  const [newRec, setNewRec] = useState({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱" });
+  const [newRec, setNewRec] = useState({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱", category:"" });
   const addRec = async () => {
     if (!newRec.name) return;
     const base = { ...newRec, amount:newRec.amount_type==="fixed"?Number(newRec.amount):null,
@@ -2376,7 +2376,7 @@ function SettingsScreen() {
     }
 
     setRecurring(prev=>[...prev, { id:newId, ...base }]);
-    setShowAdd(false); setNewRec({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱" });
+    setShowAdd(false); setNewRec({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱", category:"" });
   };
   const StatusBadge = ({ status }) => {
     const map = { registered:{label:"등록완료",color:C.income}, pending_date:{label:"자동예정",color:C.accent}, need_input:{label:"금액확인필요",color:C.expense}, inactive:{label:"비활성",color:C.textMuted} };
@@ -2405,7 +2405,7 @@ function SettingsScreen() {
           </div>
         </div>
         {isExp && (
-          <div style={{ background:C.surfaceHigh, padding:"14px 16px 16px", borderTop:`1px solid ${C.border}` }}>
+          <div onClick={e=>e.stopPropagation()} style={{ background:C.surfaceHigh, padding:"14px 16px 16px", borderTop:`1px solid ${C.border}` }}>
             <p style={{ color:C.accent, fontSize:11, fontWeight:600, margin:"0 0 12px" }}>✏️ {monthLabel} 반영 기준으로 수정</p>
             <div style={{ marginBottom:10 }}>
               <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px" }}>아이콘</p>
@@ -2424,6 +2424,14 @@ function SettingsScreen() {
                   <button key={o.v} onClick={()=>setRecEditForm(f=>({...f,amount_type:o.v}))} style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${recEditForm.amount_type===o.v?C.accent:C.border}`, background:recEditForm.amount_type===o.v?C.accentSoft:"transparent", color:recEditForm.amount_type===o.v?C.accent:C.textMuted, fontSize:12, cursor:"pointer" }}>{o.label}</button>
                 ))}
               </div>
+            </div>
+            <div style={{ marginBottom:10 }}>
+              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>카테고리</p>
+              <select value={recEditForm.category} onChange={e=>setRecEditForm(f=>({...f,category:e.target.value}))}
+                style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"9px 12px", color:C.text, fontSize:14, boxSizing:"border-box" }}>
+                <option value="">선택안함</option>
+                {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+              </select>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:8, marginBottom:14 }}>
               <div>
@@ -2840,6 +2848,14 @@ function SettingsScreen() {
                   <button key={o.v} onClick={()=>setNewRec(n=>({...n,amount_type:o.v}))} style={{ flex:1, padding:"10px", borderRadius:10, border:`1px solid ${newRec.amount_type===o.v?C.accent:C.border}`, background:newRec.amount_type===o.v?C.accentSoft:"transparent", color:newRec.amount_type===o.v?C.accent:C.textMuted, fontSize:12, cursor:"pointer" }}>{o.label}</button>
                 ))}
               </div>
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>카테고리</p>
+              <select value={newRec.category} onChange={e=>setNewRec(n=>({...n,category:e.target.value}))}
+                style={{ width:"100%", background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:10, padding:"10px 14px", color:C.text, fontSize:14, boxSizing:"border-box" }}>
+                <option value="">선택안함</option>
+                {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+              </select>
             </div>
             <div style={{ marginBottom:20 }}>
               <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 5px" }}>{newRec.amount_type==="fixed"?"금액":"지난달 금액 (참고)"}</p>
