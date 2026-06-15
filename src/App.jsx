@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.9";
+const APP_VERSION = "1.10.11";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -597,7 +597,7 @@ function HomeScreen() {
 // 거래 내역 화면
 // ══════════════════════════════════════════════════════════════
 function TransactionsScreen() {
-  const { transactions, setTransactions, allCategories } = useApp();
+  const { transactions, setTransactions, allCategories, highlightIds } = useApp();
   const [expandedId,   setExpandedId]   = useState(null);
   const [editingId,    setEditingId]    = useState(null);
   const [editForm,     setEditForm]     = useState({});
@@ -702,13 +702,14 @@ function TransactionsScreen() {
     const cat      = getCat(tx.category, allCategories);
     const isEditing = editingId===tx.id;
     const isOpen    = expandedId===tx.id;
+    const isHighlighted = highlightIds?.has(tx.id);
     return (
       <>
         <div onClick={()=>{ if(isEditing) setEditingId(null); }}
           style={{ display:"flex", alignItems:"center", padding:isChild?"10px 12px 10px 28px":"14px 16px",
             borderBottom:isEditing?"none":`1px solid ${C.border}`,
-            background:isEditing?C.accentSoft:isChild?C.surfaceHigh:"transparent",
-            cursor:isEditing?"pointer":"default", transition:"background 0.15s" }}>
+            background:isEditing?C.accentSoft:isHighlighted?"#FFF8E7":isChild?C.surfaceHigh:"transparent",
+            cursor:isEditing?"pointer":"default", transition:"background 0.5s" }}>
           <div style={{ width:36, height:36, borderRadius:10, background:(cat.color||C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:isChild?14:18, marginRight:12, flexShrink:0 }}>
             {cat.icon||"💳"}
           </div>
@@ -3348,6 +3349,7 @@ export default function App() {
   });
   const [allCategories, setAllCategories] = useState([]);
   const [toast, setToast] = useState(null); // {name, count}
+  const [highlightIds, setHighlightIds] = useState(new Set());
   const now = new Date();
 
   // ── DB 데이터 로드 ────────────────────────────────────────
@@ -3448,7 +3450,10 @@ export default function App() {
           try {
             const pData = await sb.select("profiles", `id=eq.${newByOther[0].user_id}`, tok);
             const otherName = pData?.[0]?.name || "상대방";
-            setToast({ name: otherName, count: newByOther.length });
+            const newIds = new Set(newByOther.map(t=>t.id));
+            setHighlightIds(newIds);
+            setToast({ name: otherName, count: newByOther.length, ids: [...newIds] });
+            setTimeout(() => setHighlightIds(new Set()), 5000);
             setTimeout(() => setToast(null), 4000);
           } catch(e) {}
         }
@@ -3709,6 +3714,7 @@ export default function App() {
     addTransactions, activeTab, setActiveTab,
     budgets, setBudgets, token, profile, setProfile, authUser, handleSignOut,
     allCategories, setAllCategories,
+    highlightIds, setHighlightIds,
   };
 
   return (
@@ -3727,11 +3733,19 @@ export default function App() {
           <div onClick={()=>{ setActiveTab("transactions"); setToast(null); }}
             style={{ position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)",
               width:"calc(100% - 32px)", maxWidth:398,
-              background:"#1C1C1E", color:"#fff", borderRadius:14, padding:"14px 18px",
+              background:C.surface, borderRadius:16, padding:"14px 18px",
               display:"flex", justifyContent:"space-between", alignItems:"center",
-              zIndex:9999, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.3)" }}>
-            <span style={{ fontSize:14 }}>🔔 {toast.name}이(가) {toast.count}건 입력했어요</span>
-            <span style={{ color:C.accent, fontSize:13, fontWeight:600, marginLeft:8 }}>보기 →</span>
+              zIndex:9999, cursor:"pointer",
+              boxShadow:"0 4px 24px rgba(0,0,0,0.12)",
+              border:`1px solid ${C.border}` }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ fontSize:20 }}>🔔</span>
+              <div>
+                <p style={{ color:C.text, fontSize:13, fontWeight:600, margin:0 }}>{toast.name}이(가) {toast.count}건 입력했어요</p>
+                <p style={{ color:C.textMuted, fontSize:11, margin:"2px 0 0" }}>탭해서 확인하기</p>
+              </div>
+            </div>
+            <span style={{ color:C.accent, fontSize:13, fontWeight:700 }}>보기 →</span>
           </div>
         )}
 
