@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.13";
+const APP_VERSION = "1.10.14";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -611,6 +611,7 @@ function TransactionsScreen() {
 
   const now = new Date();
   const thisYear = now.getFullYear();
+  const thisYM = now.toISOString().slice(0,7); // 이번달 YYYY-MM
 
   // 데이터 있는 연도 목록 (최신순)
   const availableYears = [...new Set(
@@ -619,6 +620,14 @@ function TransactionsScreen() {
   if (!availableYears.includes(thisYear)) availableYears.unshift(thisYear);
 
   const [selectedYear, setSelectedYear] = useState(thisYear);
+  const [expandedMonths, setExpandedMonths] = useState(new Set([thisYM])); // 이번달 기본 펼침
+
+  const toggleMonth = (ym) => setExpandedMonths(prev => {
+    const next = new Set(prev);
+    if (next.has(ym)) next.delete(ym);
+    else next.add(ym);
+    return next;
+  });
 
   // 연도 필터 적용
   const yearFiltered = transactions.filter(t => t.date?.startsWith(String(selectedYear)));
@@ -859,27 +868,73 @@ function TransactionsScreen() {
       </div>
 
 
-      {/* 내역 목록 */}
-      <div style={{ background:C.surface, borderRadius:16, margin:"0 16px", border:`1px solid ${C.border}`, overflow:"hidden" }}>
-        {filtered.length===0
-          ? <div style={{ padding:"40px 20px", textAlign:"center" }}><p style={{ color:C.textMuted, fontSize:32, margin:"0 0 10px" }}>🔍</p><p style={{ color:C.textMuted, fontSize:14, margin:0 }}>검색 결과가 없어요</p></div>
-          : filtered.map(tx=>(
-            <div key={tx.id}>
-              <TxRow tx={tx} />
-              {tx.is_group && expandedId===tx.id && (
-                <div style={{ background:C.surfaceHigh }}>
-                  {tx.children.map(child=>(
-                    <div key={child.id}>
-                      <TxRow tx={child} isChild parentId={tx.id} />
-                      {editingId===child.id && <div style={{ padding:"0 16px 12px", background:C.accentSoft }}><EditRow tx={child} isChild parentId={tx.id} /></div>}
+      {/* 내역 목록 - 월별 그룹화 */}
+      {filtered.length === 0 ? (
+        <div style={{ background:C.surface, borderRadius:16, margin:"0 16px", border:`1px solid ${C.border}`, padding:"40px 20px", textAlign:"center" }}>
+          <p style={{ color:C.textMuted, fontSize:32, margin:"0 0 10px" }}>🔍</p>
+          <p style={{ color:C.textMuted, fontSize:14, margin:0 }}>검색 결과가 없어요</p>
+        </div>
+      ) : (() => {
+        // 월별 그룹화
+        const monthGroups = {};
+        filtered.forEach(tx => {
+          const ym = tx.date?.slice(0,7) || "미분류";
+          if (!monthGroups[ym]) monthGroups[ym] = [];
+          monthGroups[ym].push(tx);
+        });
+        const sortedMonths = Object.keys(monthGroups).sort((a,b)=>b.localeCompare(a));
+
+        return sortedMonths.map(ym => {
+          const txs = monthGroups[ym];
+          const monthLabel = ym === "미분류" ? "미분류" : `${Number(ym.slice(5))}월`;
+          const monthIncome = txs.reduce((s,t)=>t.type==="income"?s+t.amount:s, 0);
+          const monthExpense = txs.reduce((s,t)=>t.type==="expense"?s+t.amount:s, 0);
+          const isOpen = expandedMonths.has(ym);
+
+          return (
+            <div key={ym} style={{ margin:"0 16px 10px" }}>
+              {/* 월별 subsum 헤더 */}
+              <div onClick={()=>toggleMonth(ym)}
+                style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                  background:C.surfaceHigh, borderRadius:isOpen?"12px 12px 0 0":12,
+                  padding:"10px 16px", cursor:"pointer",
+                  border:`1px solid ${C.border}`, borderBottom:isOpen?"none":undefined }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ color:C.text, fontSize:13, fontWeight:700 }}>{monthLabel}</span>
+                  <span style={{ color:C.textMuted, fontSize:11 }}>{txs.length}건</span>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  {monthIncome > 0 && <span style={{ color:C.income, fontSize:12, fontWeight:600 }}>+{fmt(monthIncome)}</span>}
+                  {monthExpense > 0 && <span style={{ color:C.expense, fontSize:12, fontWeight:600 }}>-{fmt(monthExpense)}</span>}
+                  <span style={{ color:C.textMuted, fontSize:12 }}>{isOpen?"▼":"▶"}</span>
+                </div>
+              </div>
+
+              {/* 월별 거래 목록 */}
+              {isOpen && (
+                <div style={{ background:C.surface, borderRadius:"0 0 12px 12px", border:`1px solid ${C.border}`, borderTop:"none", overflow:"hidden" }}>
+                  {txs.map(tx=>(
+                    <div key={tx.id}>
+                      <TxRow tx={tx} />
+                      {tx.is_group && expandedId===tx.id && (
+                        <div style={{ background:C.surfaceHigh }}>
+                          {tx.children.map(child=>(
+                            <div key={child.id}>
+                              <TxRow tx={child} isChild parentId={tx.id} />
+                              {editingId===child.id && <div style={{ padding:"0 16px 12px", background:C.accentSoft }}><EditRow tx={child} isChild parentId={tx.id} /></div>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {editingId===tx.id && !tx.is_group && <div style={{ padding:"0 16px 12px", background:C.accentSoft }}><EditRow tx={tx} /></div>}
                     </div>
                   ))}
                 </div>
               )}
             </div>
-          ))
-        }
-      </div>
+          );
+        });
+      })()}
     </div>
   );
 }
