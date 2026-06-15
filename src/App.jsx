@@ -3593,6 +3593,23 @@ export default function App() {
     setTransactionsLocal(INIT_TRANSACTIONS);
   };
 
+  // 백그라운드 5분+ 후 포커스 복귀 시 재로드
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const lastLoad = localStorage.getItem("last_load_time");
+      const fid = profile?.family_id;
+      const tok = localStorage.getItem("sb_token");
+      if (!fid || !tok) return;
+      if (!lastLoad || Date.now() - Number(lastLoad) > 5 * 60 * 1000) {
+        localStorage.setItem("last_load_time", String(Date.now()));
+        _loadAll(fid, tok);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [profile?.family_id]);
+
   // ── 로딩 중 ───────────────────────────────────────────────
   if (authLoading || profileLoading) return (
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16 }}>
@@ -3686,23 +3703,6 @@ export default function App() {
       </div>
     </div>
   );
-
-  // 백그라운드 5분+ 후 포커스 복귀 시 재로드
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
-      const lastLoad = localStorage.getItem("last_load_time");
-      const fid = profile?.family_id;
-      const tok = localStorage.getItem("sb_token");
-      if (!fid || !tok) return;
-      if (!lastLoad || Date.now() - Number(lastLoad) > 5 * 60 * 1000) {
-        localStorage.setItem("last_load_time", String(Date.now()));
-        _loadAll(fid, tok);
-      }
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [profile?.family_id]);
 
   const ctx = {
     transactions, setTransactions, recurring, setRecurring,
