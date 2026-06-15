@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.11";
+const APP_VERSION = "1.10.12";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3441,10 +3441,11 @@ export default function App() {
       // 상대방 새 항목 감지 → 토스트
       const myUserId = localStorage.getItem("sb_user_id");
       const lastCheck = localStorage.getItem("last_check_time");
-      if (myUserId && lastCheck && txData?.length) {
+      const checkFrom = lastCheck ? Number(lastCheck) : Date.now() - 60 * 60 * 1000; // 없으면 1시간 전부터
+      if (myUserId && txData?.length) {
         const newByOther = (txData||[]).filter(t =>
           t.user_id && t.user_id !== myUserId &&
-          t.created_at && new Date(t.created_at).getTime() > Number(lastCheck)
+          t.created_at && new Date(t.created_at).getTime() > checkFrom
         );
         if (newByOther.length > 0) {
           try {
