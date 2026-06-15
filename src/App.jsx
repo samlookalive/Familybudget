@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.9";
+const APP_VERSION = "1.10.10";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3435,25 +3435,10 @@ export default function App() {
         setAllCategories(formatted);
       }
 
-      // 상대방이 입력한 새 항목 감지 → 토스트 알림
-      const myUserId = localStorage.getItem("sb_user_id");
-      const lastCheck = localStorage.getItem("last_check_time");
-      if (myUserId && lastCheck && txData?.length) {
-        const newByOther = (txData||[]).filter(t =>
-          t.user_id && t.user_id !== myUserId &&
-          t.created_at && new Date(t.created_at).getTime() > Number(lastCheck)
-        );
-        if (newByOther.length > 0) {
-          // profiles 테이블에서 상대방 이름 가져오기
-          const otherUserId = newByOther[0].user_id;
-          try {
-            const pData = await sb.select("profiles", `id=eq.${otherUserId}`, tok);
-            const otherName = pData?.[0]?.name || "상대방";
-            setToast({ name: otherName, count: newByOther.length });
-            setTimeout(() => setToast(null), 4000);
-          } catch(e) {}
-        }
-      }
+      // 상대방이 입력한 새 항목 감지 → 토스트 알림 (임시 비활성화)
+      // const myUserId = localStorage.getItem("sb_user_id");
+      // const lastCheck = localStorage.getItem("last_check_time");
+      // if (myUserId && lastCheck && txData?.length) { ... }
       localStorage.setItem("last_check_time", Date.now());
 
     } catch(e) { ; }
