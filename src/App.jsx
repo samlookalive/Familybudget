@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.8";
+const APP_VERSION = "1.10.9";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3117,6 +3117,7 @@ function AuthScreen({ onAuth }) {
         }
         localStorage.setItem("sb_token", res.access_token);
         if (res.refresh_token) localStorage.setItem("sb_refresh_token", res.refresh_token);
+        if (res.user?.id) localStorage.setItem("sb_user_id", res.user.id);
         if (rememberEmail) localStorage.setItem("sb_saved_email", email);
         else localStorage.removeItem("sb_saved_email");
         if (!res.user?.id) throw new Error("로그인 정보를 불러오지 못했어요. 다시 시도해주세요");
@@ -3131,6 +3132,7 @@ function AuthScreen({ onAuth }) {
         if (!res.access_token) { setVerified(true); setLoading(false); return; }
         localStorage.setItem("sb_token", res.access_token);
         if (res.refresh_token) localStorage.setItem("sb_refresh_token", res.refresh_token);
+        if (res.user?.id) localStorage.setItem("sb_user_id", res.user.id);
         onAuth(res.access_token, res.user, res.refresh_token);
       }
     } catch(e) { setError(e.message); }
@@ -3344,7 +3346,8 @@ export default function App() {
     totalEnabled: false, total: 0,
     categories: {},
   });
-  const [allCategories, setAllCategories] = useState([]); // [{id,name,icon,color,type,isParent,parentId}]
+  const [allCategories, setAllCategories] = useState([]);
+  const [toast, setToast] = useState(null); // {name, count}
   const now = new Date();
 
   // ── DB 데이터 로드 ────────────────────────────────────────
@@ -3433,6 +3436,25 @@ export default function App() {
         setAllCategories(formatted);
       }
 
+      // 상대방 새 항목 감지 → 토스트
+      const myUserId = localStorage.getItem("sb_user_id");
+      const lastCheck = localStorage.getItem("last_check_time");
+      if (myUserId && lastCheck && txData?.length) {
+        const newByOther = (txData||[]).filter(t =>
+          t.user_id && t.user_id !== myUserId &&
+          t.created_at && new Date(t.created_at).getTime() > Number(lastCheck)
+        );
+        if (newByOther.length > 0) {
+          try {
+            const pData = await sb.select("profiles", `id=eq.${newByOther[0].user_id}`, tok);
+            const otherName = pData?.[0]?.name || "상대방";
+            setToast({ name: otherName, count: newByOther.length });
+            setTimeout(() => setToast(null), 4000);
+          } catch(e) {}
+        }
+      }
+      localStorage.setItem("last_check_time", String(Date.now()));
+
     } catch(e) { ; }
   };
 
@@ -3470,6 +3492,7 @@ export default function App() {
         }
         setToken(tok);
         setAuthUser(user);
+        if (user?.id) localStorage.setItem("sb_user_id", user.id);
         const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
         if (pList?.length) {
           setProfile(pList[0]);
@@ -3664,6 +3687,23 @@ export default function App() {
     </div>
   );
 
+  // 백그라운드 5분+ 후 포커스 복귀 시 재로드
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const lastLoad = localStorage.getItem("last_load_time");
+      const fid = profile?.family_id;
+      const tok = localStorage.getItem("sb_token");
+      if (!fid || !tok) return;
+      if (!lastLoad || Date.now() - Number(lastLoad) > 5 * 60 * 1000) {
+        localStorage.setItem("last_load_time", String(Date.now()));
+        _loadAll(fid, tok);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [profile?.family_id]);
+
   const ctx = {
     transactions, setTransactions, recurring, setRecurring,
     addTransactions, activeTab, setActiveTab,
@@ -3681,6 +3721,19 @@ export default function App() {
           {activeTab==="stats"        && <StatsScreen />}
           {activeTab==="settings"     && <SettingsScreen />}
         </div>
+
+        {/* 토스트 알림 */}
+        {toast && (
+          <div onClick={()=>{ setActiveTab("transactions"); setToast(null); }}
+            style={{ position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)",
+              width:"calc(100% - 32px)", maxWidth:398,
+              background:"#1C1C1E", color:"#fff", borderRadius:14, padding:"14px 18px",
+              display:"flex", justifyContent:"space-between", alignItems:"center",
+              zIndex:9999, cursor:"pointer", boxShadow:"0 4px 20px rgba(0,0,0,0.3)" }}>
+            <span style={{ fontSize:14 }}>🔔 {toast.name}이(가) {toast.count}건 입력했어요</span>
+            <span style={{ color:C.accent, fontSize:13, fontWeight:600, marginLeft:8 }}>보기 →</span>
+          </div>
+        )}
 
         <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, background:"rgba(245,246,250,0.95)", backdropFilter:"blur(16px)", borderTop:`1px solid ${C.border}`, zIndex:100, paddingBottom:"env(safe-area-inset-bottom, 16px)" }}>
           {activeTab==="stats" && (
