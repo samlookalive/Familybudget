@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.8";
+const APP_VERSION = "1.10.9";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3688,13 +3688,6 @@ export default function App() {
     </div>
   );
 
-  const ctx = {
-    transactions, setTransactions, recurring, setRecurring,
-    addTransactions, activeTab, setActiveTab,
-    budgets, setBudgets, token, profile, setProfile, authUser, handleSignOut,
-    allCategories, setAllCategories,
-  };
-
   // 백그라운드에서 포커스 복귀 시 5분 이상 지났으면 재로드
   useEffect(() => {
     const onVisible = () => {
@@ -3710,6 +3703,13 @@ export default function App() {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [profile?.family_id]);
+
+  const ctx = {
+    transactions, setTransactions, recurring, setRecurring,
+    addTransactions, activeTab, setActiveTab,
+    budgets, setBudgets, token, profile, setProfile, authUser, handleSignOut,
+    allCategories, setAllCategories,
+  };
 
   return (
     <AppContext.Provider value={ctx}>
