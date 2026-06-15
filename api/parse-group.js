@@ -12,6 +12,18 @@ export default async function handler(req, res) {
   const today = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now()-86400000).toISOString().slice(0, 10);
 
+  // 요일별 날짜 계산
+  const todayDate = new Date();
+  const dow = todayDate.getDay();
+  const getDate = (diff) => {
+    const d = new Date(todayDate);
+    d.setDate(todayDate.getDate() + diff);
+    return d.toISOString().slice(0,10);
+  };
+  const days = ['일','월','화','수','목','금','토'];
+  const thisWeek = days.map((n,d) => `이번주${n}요일=${getDate(d-dow)}`).join(', ');
+  const lastWeek = days.map((n,d) => `지난주${n}요일=${getDate(d-dow-7)}`).join(', ');
+
   const categoryList = categories?.length
     ? categories.join(", ")
     : "식비, 교통, 쇼핑, 의료/건강, 생활/마트, 문화/여가, 여행, 월세/관리비, 구독서비스, 통신비, 교육, 보험, 기타";
@@ -24,6 +36,9 @@ export default async function handler(req, res) {
 아래 텍스트에서 묶음 지출 내역을 파싱해줘.
 ${rulesText}
 - 어제 = ${yesterday}, 날짜 없으면 오늘(${today})
+- 이번주 요일: ${thisWeek}
+- 지난주 요일: ${lastWeek}
+- "지난 토요일", "저번 토요일" 등도 지난주 토요일로 처리
 - memo는 "가맹점/품목" 형식
 
 카테고리: ${categoryList}
