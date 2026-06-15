@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.6";
+const APP_VERSION = "1.10.7";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2423,12 +2423,13 @@ function SettingsScreen() {
   };
   const submitConfirm = () => {
     const amount = Number(confirmAmt);
+    const ym = new Date().toISOString().slice(0,7);
     addTransactions([{ id:uid(), type:"expense", amount, memo:confirmItem.name, date:today(), category:confirmItem.category, is_group:false, from_recurring:true }]);
-    setRecurring(prev=>prev.map(i=>i.id===confirmItem.id?{...i,status:"registered",last_amount:amount}:i));
+    setRecurring(prev=>prev.map(i=>i.id===confirmItem.id?{...i,status:"registered",last_amount:amount,last_generated_month:ym}:i));
 
     const tok = localStorage.getItem("sb_token");
     if (tok) {
-      sb.update("recurring_transactions", { status:"registered", last_amount:amount }, { id:confirmItem.id }, tok).catch(e=>console.log("정기지출 확정 DB 반영 실패:", e.message));
+      sb.update("recurring_transactions", { status:"registered", last_amount:amount, last_generated_month:ym }, { id:confirmItem.id }, tok).catch(e=>console.log("정기지출 확정 DB 반영 실패:", e.message));
     }
     setConfirmItem(null); setConfirmAmt("");
   };
@@ -3362,7 +3363,59 @@ export default function App() {
       if (txFmt.length>0) setTransactionsLocal(txFmt);
 
       const recData = await sb.select("recurring_transactions",`family_id=eq.${fid}&order=day_of_month.asc`,tok);
-      if (recData?.length) setRecurringLocal(recData);
+      if (recData?.length) {
+        setRecurringLocal(recData);
+
+        // 정기지출 자동생성
+        const now = new Date();
+        const ym = now.toISOString().slice(0,7); // YYYY-MM
+        const year = now.getFullYear();
+        const month = now.getMonth()+1;
+
+        for (const rec of recData) {
+          if (!rec.is_active) continue;
+          if (rec.last_generated_month === ym) continue; // 이미 이번달 처리됨
+
+          if (rec.amount_type === "fixed" && rec.amount) {
+            // 날짜 보정 (예: 31일인데 2월이면 28일로)
+            const maxDay = new Date(year, month, 0).getDate();
+            const day = Math.min(rec.day_of_month, maxDay);
+            const dateStr = `${ym}-${String(day).padStart(2,"0")}`;
+
+            // 이번달에 이미 같은 정기지출로 만들어진 거래가 있는지 확인
+            const alreadyExists = (txData||[]).some(t=>
+              t.memo === `${rec.icon||""} ${rec.name} (정기)`.trim() &&
+              t.date?.startsWith(ym)
+            );
+            if (alreadyExists) {
+              await sb.update("recurring_transactions", { last_generated_month: ym }, { id: rec.id }, tok).catch(()=>{});
+              continue;
+            }
+
+            // 거래 자동 생성
+            try {
+              await sb.insert("transactions", {
+                family_id: fid, user_id: rec.user_id || null,
+                type: "expense", amount: rec.amount,
+                memo: `${rec.icon||""} ${rec.name} (정기)`.trim(),
+                date: dateStr, category: rec.category || "기타",
+                is_group: false, from_recurring: true,
+              }, tok);
+              await sb.update("recurring_transactions", { last_generated_month: ym, status: "registered" }, { id: rec.id }, tok);
+            } catch(e) { console.log("정기지출 자동생성 실패:", rec.name, e.message); }
+
+          } else if (rec.amount_type === "variable") {
+            // 변동 항목 → need_input으로 리셋 (자동생성 없음)
+            await sb.update("recurring_transactions", { status: "need_input" }, { id: rec.id }, tok).catch(()=>{});
+            setRecurringLocal(prev => prev.map(r => r.id===rec.id ? {...r, status:"need_input"} : r));
+          }
+        }
+
+        // 자동생성 후 거래내역 새로 로드
+        const txDataFresh = await sb.select("transactions",
+          `family_id=eq.${fid}&parent_id=is.null&order=date.desc,created_at.desc`, tok);
+        if (txDataFresh?.length) setTransactionsLocal(txDataFresh.map(t=>t.is_group?{...t,children:cm[t.id]||[],child_count:(cm[t.id]||[]).length}:t));
+      }
 
       const ym = new Date().toISOString().slice(0,7);
       const bData = await sb.select("budgets",`family_id=eq.${fid}&year_month=eq.${ym}`,tok);
