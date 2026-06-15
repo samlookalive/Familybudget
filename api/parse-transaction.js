@@ -12,6 +12,18 @@ export default async function handler(req, res) {
   const today = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now()-86400000).toISOString().slice(0, 10);
 
+  // 요일별 날짜 계산
+  const todayDate = new Date();
+  const dow = todayDate.getDay(); // 0=일,1=월,...,6=토
+  const getDate = (diff) => {
+    const d = new Date(todayDate);
+    d.setDate(todayDate.getDate() + diff);
+    return d.toISOString().slice(0,10);
+  };
+  const days = ['일','월','화','수','목','금','토'];
+  const thisWeek = days.map((n,d) => `이번주${n}요일=${getDate(d-dow)}`).join(', ');
+  const lastWeek = days.map((n,d) => `지난주${n}요일=${getDate(d-dow-7)}`).join(', ');
+
   // 카테고리 목록 (동적 or 기본값)
   const categoryList = categories?.length
     ? categories.join(", ")
@@ -30,6 +42,9 @@ ${rulesText}
 - 나머지 → type: "expense"
 - 만원 = 10000원, 천원 = 1000원
 - 어제 = ${yesterday}, 날짜 없으면 오늘(${today})
+- 이번주 요일: ${thisWeek}
+- 지난주 요일: ${lastWeek}
+- "지난 토요일", "저번 토요일" 등도 지난주 토요일로 처리
 - memo는 "가맹점/품목" 형식 (예: "스타벅스/아메리카노", 품목 없으면 "스타벅스")
 
 카테고리: ${categoryList}
