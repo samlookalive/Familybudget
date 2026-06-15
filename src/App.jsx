@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.12";
+const APP_VERSION = "1.10.13";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -609,8 +609,21 @@ function TransactionsScreen() {
   const [catFilter,    setCatFilter]    = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const summary = calcSummary(transactions);
-  const CAT_OPTIONS = [...new Set(transactions.flatMap(t=>t.is_group?[t.category,...t.children.map(c=>c.category)]:[t.category]))];
+  const now = new Date();
+  const thisYear = now.getFullYear();
+
+  // 데이터 있는 연도 목록 (최신순)
+  const availableYears = [...new Set(
+    transactions.map(t => t.date?.slice(0,4)).filter(Boolean)
+  )].sort((a,b)=>b-a).map(Number);
+  if (!availableYears.includes(thisYear)) availableYears.unshift(thisYear);
+
+  const [selectedYear, setSelectedYear] = useState(thisYear);
+
+  // 연도 필터 적용
+  const yearFiltered = transactions.filter(t => t.date?.startsWith(String(selectedYear)));
+  const summary = calcSummary(yearFiltered);
+  const CAT_OPTIONS = [...new Set(yearFiltered.flatMap(t=>t.is_group?[t.category,...t.children.map(c=>c.category)]:[t.category]))];
   const activeFilterCount = [searchText,minAmount,maxAmount,catFilter].filter(Boolean).length;
 
   const startEdit = (tx) => { setEditingId(tx.id); setEditForm({ amount:tx.amount, memo:tx.memo, date:tx.date, category:tx.category }); };
@@ -657,7 +670,7 @@ function TransactionsScreen() {
     }
   };
 
-  const filtered = transactions.filter(tx=>{
+  const filtered = yearFiltered.filter(tx=>{
     if (typeFilter==="지출" && tx.type!=="expense") return false;
     if (typeFilter==="수입" && tx.type!=="income")  return false;
     const catName = CATEGORIES[tx.category]?.name||"";
@@ -765,9 +778,12 @@ function TransactionsScreen() {
 
       <div style={{ padding:"28px 20px 12px" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-          <div>
-            <p style={{ color:C.textMuted, fontSize:11, margin:0, letterSpacing:1, textTransform:"uppercase" }}></p>
-            <h2 style={{ color:C.text, fontSize:20, margin:"4px 0 0", fontWeight:700 }}>거래 내역</h2>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <h2 style={{ color:C.text, fontSize:20, margin:0, fontWeight:700 }}>거래 내역</h2>
+            <select value={selectedYear} onChange={e=>setSelectedYear(Number(e.target.value))}
+              style={{ background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:8, padding:"4px 8px", color:C.accent, fontSize:13, fontWeight:600, cursor:"pointer" }}>
+              {availableYears.map(y=><option key={y} value={y}>{y}년</option>)}
+            </select>
           </div>
           <button onClick={()=>setShowSearch(s=>!s)}
             style={{ padding:"8px 14px", borderRadius:10, border:`1px solid ${showSearch||activeFilterCount>0?C.accent:C.border}`, background:showSearch||activeFilterCount>0?C.accentSoft:"transparent", color:showSearch||activeFilterCount>0?C.accent:C.textMuted, fontSize:12, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
@@ -781,6 +797,7 @@ function TransactionsScreen() {
           ))}
         </div>
       </div>
+
 
       {/* 검색 패널 */}
       {showSearch && (
@@ -819,17 +836,28 @@ function TransactionsScreen() {
         </div>
       )}
 
-      {/* 월 요약 */}
-      <div style={{ margin:"0 16px 16px", background:C.surface, borderRadius:12, padding:"12px 16px", border:`1px solid ${C.border}`, display:"flex", justifyContent:"space-around" }}>
-        {[{label:"수입",val:summary.income,color:C.income},{label:"지출",val:summary.expense,color:C.expense},{label:"잔액",val:summary.balance,color:summary.balance>=0?C.income:C.expense}].map(s=>(
-          <div key={s.label} style={{ textAlign:"center" }}>
-            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 3px" }}>{s.label}</p>
-            <p style={{ color:s.color, fontSize:14, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(s.val)}</p>
+      {/* 요약바 - 검색중엔 검색결과, 아니면 연도 총계 */}
+      <div style={{ margin:"0 16px 16px", background:C.surface, borderRadius:12, padding:"12px 16px", border:`1px solid ${C.border}` }}>
+        {activeFilterCount > 0 ? (
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ color:C.textMuted, fontSize:12 }}>검색 결과</span>
+            <div style={{ display:"flex", gap:16 }}>
+              <span style={{ color:C.expense, fontSize:13, fontWeight:700 }}>지출 {fmt(calcSummary(filtered).expense)}원</span>
+              <span style={{ color:C.textMuted, fontSize:13 }}>{filtered.length}건</span>
+            </div>
           </div>
-        ))}
+        ) : (
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <span style={{ color:C.textMuted, fontSize:12 }}>{selectedYear}년 전체</span>
+            <div style={{ display:"flex", gap:16 }}>
+              <span style={{ color:C.expense, fontSize:13, fontWeight:700 }}>지출 {fmt(summary.expense)}원</span>
+              <span style={{ color:C.income, fontSize:13, fontWeight:700 }}>수입 {fmt(summary.income)}원</span>
+              <span style={{ color:C.textMuted, fontSize:12 }}>{yearFiltered.length}건</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {activeFilterCount>0 && <div style={{ margin:"0 16px 8px" }}><span style={{ color:C.textMuted, fontSize:12 }}>{filtered.length}건 검색됨</span></div>}
 
       {/* 내역 목록 */}
       <div style={{ background:C.surface, borderRadius:16, margin:"0 16px", border:`1px solid ${C.border}`, overflow:"hidden" }}>
