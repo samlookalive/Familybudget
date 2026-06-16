@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Ca
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.20";
+const APP_VERSION = "1.10.21";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -484,29 +484,6 @@ function HomeScreen() {
         );
       })()}
 
-      {/* 고정비 / 변동비 — 클릭하면 드릴다운 */}
-      <div style={{ margin:"0 16px 16px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-        {[
-          { label:"고정비", amount:fixed,    color:C.fixed,    icon:"📌", key:"fixed",    count:fixedItems.length },
-          { label:"변동비", amount:variable, color:C.variable, icon:"🔄", key:"variable", count:variableItems.length },
-        ].map(item=>(
-          <div key={item.label} onClick={()=>setDrillDown(item.key)}
-            style={{ background:C.surface, borderRadius:16, padding:"16px", border:`1px solid ${C.border}`,
-              cursor:"pointer", transition:"all 0.15s",
-              boxShadow: drillDown===item.key ? `0 0 0 2px ${item.color}` : "0 1px 8px rgba(0,0,0,0.04)" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                <span style={{ fontSize:16 }}>{item.icon}</span>
-                <span style={{ color:C.textMuted, fontSize:12 }}>{item.label}</span>
-              </div>
-              <span style={{ color:C.textMuted, fontSize:11 }}>›</span>
-            </div>
-            <p style={{ color:item.color, fontSize:18, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(item.amount)}</p>
-            <p style={{ color:C.textMuted, fontSize:11, margin:"2px 0 0" }}>원 · {item.count}건</p>
-          </div>
-        ))}
-      </div>
-
       {/* 카테고리별 지출 */}
       {(() => {
         const now = new Date();
@@ -522,11 +499,11 @@ function HomeScreen() {
               : <>
                 {/* 도넛 차트 */}
                 <div style={{ display:"flex", alignItems:"center", marginBottom:16 }}>
-                  <div style={{ width:120, height:120, flexShrink:0, position:"relative" }}>
+                  <div style={{ width:160, height:160, flexShrink:0, position:"relative" }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie data={catStats} dataKey="amount" nameKey="category"
-                          innerRadius={38} outerRadius={58} paddingAngle={2} stroke="none">
+                          innerRadius={50} outerRadius={78} paddingAngle={2} stroke="none">
                           {catStats.map((s,i)=>{
                             const cat = getCat(s.category, allCategories);
                             return <Cell key={i} fill={cat.color||C.accent} />;
@@ -537,18 +514,18 @@ function HomeScreen() {
                       </PieChart>
                     </ResponsiveContainer>
                     <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", textAlign:"center", pointerEvents:"none" }}>
-                      <p style={{ color:C.textMuted, fontSize:10, margin:0 }}>총 지출</p>
-                      <p style={{ color:C.text, fontSize:13, fontWeight:700, margin:0 }}>{Math.round(catStats.reduce((s,c)=>s+c.amount,0)/10000)}만</p>
+                      <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>총 지출</p>
+                      <p style={{ color:C.text, fontSize:17, fontWeight:800, margin:0 }}>{Math.round(catStats.reduce((s,c)=>s+c.amount,0)/10000)}만</p>
                     </div>
                   </div>
-                  <div style={{ flex:1, paddingLeft:16, display:"flex", flexDirection:"column", gap:6 }}>
-                    {catStats.slice(0,5).map(s=>{
+                  <div style={{ flex:1, paddingLeft:12, display:"flex", flexDirection:"column", gap:5, minWidth:0 }}>
+                    {catStats.slice(0,4).map(s=>{
                       const cat = getCat(s.category, allCategories);
                       return (
-                        <div key={s.category} style={{ display:"flex", alignItems:"center", gap:6 }}>
-                          <div style={{ width:8, height:8, borderRadius:"50%", background:cat.color||C.accent, flexShrink:0 }} />
-                          <span style={{ color:C.textSub, fontSize:12, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cat.icon} {s.category}</span>
-                          <span style={{ color:C.textMuted, fontSize:11, fontWeight:600 }}>{s.ratio}%</span>
+                        <div key={s.category} style={{ display:"flex", alignItems:"center", gap:5 }}>
+                          <div style={{ width:7, height:7, borderRadius:"50%", background:cat.color||C.accent, flexShrink:0 }} />
+                          <span style={{ color:C.textMuted, fontSize:11, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.category}</span>
+                          <span style={{ color:C.textSub, fontSize:11, fontWeight:600 }}>{s.ratio}%</span>
                         </div>
                       );
                     })}
@@ -584,6 +561,29 @@ function HomeScreen() {
           </div>
         );
       })()}
+
+      {/* 고정비 / 변동비 — 클릭하면 드릴다운 */}
+      <div style={{ margin:"0 16px 16px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        {[
+          { label:"고정비", amount:fixed,    color:C.fixed,    icon:"📌", key:"fixed",    count:fixedItems.length },
+          { label:"변동비", amount:variable, color:C.variable, icon:"🔄", key:"variable", count:variableItems.length },
+        ].map(item=>(
+          <div key={item.label} onClick={()=>setDrillDown(item.key)}
+            style={{ background:C.surface, borderRadius:16, padding:"16px", border:`1px solid ${C.border}`,
+              cursor:"pointer", transition:"all 0.15s",
+              boxShadow: drillDown===item.key ? `0 0 0 2px ${item.color}` : "0 1px 8px rgba(0,0,0,0.04)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <span style={{ fontSize:16 }}>{item.icon}</span>
+                <span style={{ color:C.textMuted, fontSize:12 }}>{item.label}</span>
+              </div>
+              <span style={{ color:C.textMuted, fontSize:11 }}>›</span>
+            </div>
+            <p style={{ color:item.color, fontSize:18, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(item.amount)}</p>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"2px 0 0" }}>원 · {item.count}건</p>
+          </div>
+        ))}
+      </div>
 
       {/* 카테고리 드릴다운 바텀시트 */}
       {catDrillDown && (() => {
