@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.17";
+const APP_VERSION = "1.10.18";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -299,7 +299,7 @@ function HomeScreen() {
   const summary  = calcSummary(monthTx);
   const catStats = calcCategoryStats(monthTx, allCategories);
   const { fixed, variable } = calcFixedVariable(monthTx, recurring);
-  const pct = summary.income > 0 ? Math.round((summary.expense/summary.income)*100) : 0;
+  const savingsRate = summary.income > 0 ? Math.round(((summary.income-summary.expense)/summary.income)*100) : 0;
   const [familyName, setFamilyName] = useState("우리집");
 
   useEffect(() => {
@@ -408,7 +408,7 @@ function HomeScreen() {
         </div>
       </div>
 
-      {/* 메인 카드 — 지출금액 + 수입 대비 지출 % */}
+      {/* 메인 카드 — 지출금액 + 저축률 */}
       <div style={{ margin:"0 16px 16px", background:"linear-gradient(135deg,#EEF2FF,#E8EDFF)", borderRadius:20, padding:"24px", border:`1px solid ${C.border}` }}>
         <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px", letterSpacing:1, textTransform:"uppercase" }}>이번 달 지출</p>
 
@@ -417,14 +417,14 @@ function HomeScreen() {
           {fmt(summary.expense)}<span style={{ fontSize:17, fontWeight:400, color:C.textMuted, marginLeft:4 }}>원</span>
         </p>
 
-        {/* 수입 대비 지출 % */}
+        {/* 저축률 */}
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20 }}>
-          <span style={{ color: pct>=100?C.expense:pct>=80?"#E67E22":C.income, fontSize:22, fontWeight:800, fontFamily:"'DM Mono',monospace" }}>
-            {pct}%
+          <span style={{ color: savingsRate<0?C.expense:savingsRate<20?"#E67E22":C.income, fontSize:22, fontWeight:800, fontFamily:"'DM Mono',monospace" }}>
+            {savingsRate}%
           </span>
-          <span style={{ color:C.textMuted, fontSize:12 }}>수입 대비</span>
-          {pct>=100 && <span style={{ background:C.expense, color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>초과</span>}
-          {pct>=80 && pct<100 && <span style={{ background:"#E67E22", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>주의</span>}
+          <span style={{ color:C.textMuted, fontSize:12 }}>저축률</span>
+          {savingsRate<0 && <span style={{ background:C.expense, color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>적자</span>}
+          {savingsRate>=0 && savingsRate<20 && <span style={{ background:"#E67E22", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>주의</span>}
         </div>
 
         {/* 수입 / 잔액 */}
