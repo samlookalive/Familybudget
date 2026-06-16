@@ -1,10 +1,10 @@
 import React, { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.19";
+const APP_VERSION = "1.10.20";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -519,7 +519,44 @@ function HomeScreen() {
             </div>
             {catStats.length===0
               ? <p style={{ color:C.textMuted, fontSize:13, textAlign:"center", margin:"16px 0" }}>아직 지출 내역이 없어요</p>
-              : catStats.slice(0,5).map(s=>{
+              : <>
+                {/* 도넛 차트 */}
+                <div style={{ display:"flex", alignItems:"center", marginBottom:16 }}>
+                  <div style={{ width:120, height:120, flexShrink:0, position:"relative" }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie data={catStats} dataKey="amount" nameKey="category"
+                          innerRadius={38} outerRadius={58} paddingAngle={2} stroke="none">
+                          {catStats.map((s,i)=>{
+                            const cat = getCat(s.category, allCategories);
+                            return <Cell key={i} fill={cat.color||C.accent} />;
+                          })}
+                        </Pie>
+                        <Tooltip formatter={(v)=>`${fmt(v)}원`}
+                          contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", textAlign:"center", pointerEvents:"none" }}>
+                      <p style={{ color:C.textMuted, fontSize:10, margin:0 }}>총 지출</p>
+                      <p style={{ color:C.text, fontSize:13, fontWeight:700, margin:0 }}>{Math.round(catStats.reduce((s,c)=>s+c.amount,0)/10000)}만</p>
+                    </div>
+                  </div>
+                  <div style={{ flex:1, paddingLeft:16, display:"flex", flexDirection:"column", gap:6 }}>
+                    {catStats.slice(0,5).map(s=>{
+                      const cat = getCat(s.category, allCategories);
+                      return (
+                        <div key={s.category} style={{ display:"flex", alignItems:"center", gap:6 }}>
+                          <div style={{ width:8, height:8, borderRadius:"50%", background:cat.color||C.accent, flexShrink:0 }} />
+                          <span style={{ color:C.textSub, fontSize:12, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{cat.icon} {s.category}</span>
+                          <span style={{ color:C.textMuted, fontSize:11, fontWeight:600 }}>{s.ratio}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 카테고리별 상세 (기존 리스트) */}
+                {catStats.slice(0,5).map(s=>{
                 const cat = getCat(s.category, allCategories);
                 return (
                   <div key={s.category} onClick={()=>setCatDrillDown(s.category)}
@@ -541,7 +578,8 @@ function HomeScreen() {
                     </div>
                   </div>
                 );
-              })
+                })}
+              </>
             }
           </div>
         );
