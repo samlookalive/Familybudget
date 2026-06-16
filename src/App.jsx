@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Ca
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.21";
+const APP_VERSION = "1.10.22";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -433,26 +433,13 @@ function HomeScreen() {
         </p>
 
         {/* 저축률 */}
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ color: savingsRate<0?C.expense:savingsRate<20?"#E67E22":C.income, fontSize:22, fontWeight:800, fontFamily:"'DM Mono',monospace" }}>
             {savingsRate}%
           </span>
           <span style={{ color:C.textMuted, fontSize:12 }}>저축률 (평균수입 기준)</span>
           {savingsRate<0 && <span style={{ background:C.expense, color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>적자</span>}
           {savingsRate>=0 && savingsRate<20 && <span style={{ background:"#E67E22", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>주의</span>}
-        </div>
-
-        {/* 수입 / 잔액 */}
-        <div style={{ display:"flex", gap:24 }}>
-          <div>
-            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 3px" }}>수입</p>
-            <p style={{ color:C.income, fontSize:15, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(summary.income)}</p>
-          </div>
-          <div style={{ width:1, background:C.border }} />
-          <div>
-            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 3px" }}>잔액</p>
-            <p style={{ color:summary.balance>=0?C.income:C.expense, fontSize:15, fontWeight:700, margin:0, fontFamily:"'DM Mono',monospace" }}>{fmt(summary.balance)}</p>
-          </div>
         </div>
       </div>
 
@@ -537,7 +524,9 @@ function HomeScreen() {
                 const cat = getCat(s.category, allCategories);
                 return (
                   <div key={s.category} onClick={()=>setCatDrillDown(s.category)}
-                    style={{ marginBottom:12, cursor:"pointer" }}>
+                    style={{ marginBottom:12, cursor:"pointer", transition:"opacity 0.15s" }}
+                    onMouseDown={e=>e.currentTarget.style.opacity="0.6"}
+                    onMouseUp={e=>e.currentTarget.style.opacity="1"}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
                       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                         <div style={{ width:28, height:28, borderRadius:8, background:(cat.color||C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, flexShrink:0 }}>
@@ -972,13 +961,13 @@ function TransactionsScreen() {
                 <div style={{ display:"flex", alignItems:"center", gap:12 }}>
                   {monthIncome > 0 && <span style={{ color:C.income, fontSize:12, fontWeight:600 }}>+{fmt(monthIncome)}</span>}
                   {monthExpense > 0 && <span style={{ color:C.expense, fontSize:12, fontWeight:600 }}>-{fmt(monthExpense)}</span>}
-                  <span style={{ color:C.textMuted, fontSize:12 }}>{isOpen?"▼":"▶"}</span>
+                  <span style={{ color:C.textMuted, fontSize:12, display:"inline-block", transition:"transform 0.2s", transform:isOpen?"rotate(0deg)":"rotate(0deg)" }}>{isOpen?"▼":"▶"}</span>
                 </div>
               </div>
 
               {/* 월별 거래 목록 */}
               {isOpen && (
-                <div style={{ background:C.surface, borderRadius:"0 0 12px 12px", border:`1px solid ${C.border}`, borderTop:"none", overflow:"hidden" }}>
+                <div className="tab-fade" style={{ background:C.surface, borderRadius:"0 0 12px 12px", border:`1px solid ${C.border}`, borderTop:"none", overflow:"hidden" }}>
                   {txs.map(tx=>(
                     <div key={tx.id}>
                       <TxRow tx={tx} />
@@ -3903,8 +3892,12 @@ export default function App() {
 
   return (
     <AppContext.Provider value={ctx}>
+      <style>{`
+        @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+        .tab-fade { animation: fadeIn 0.25s ease; }
+      `}</style>
       <div style={{ maxWidth:430, margin:"0 auto", minHeight:"100vh", background:C.bg, fontFamily:"'Pretendard','Apple SD Gothic Neo',sans-serif", overflowX:"hidden" }}>
-        <div style={{ minHeight:"calc(100vh - 70px)", overflowY:"auto" }}>
+        <div key={activeTab} className="tab-fade" style={{ minHeight:"calc(100vh - 70px)", overflowY:"auto" }}>
           {activeTab==="home"         && <HomeScreen />}
           {activeTab==="transactions" && <TransactionsScreen />}
           {activeTab==="input"        && <InputScreen />}
