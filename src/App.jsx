@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.15";
+const APP_VERSION = "1.10.16";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -799,11 +799,19 @@ function TransactionsScreen() {
             🔍{activeFilterCount>0&&<span style={{ background:C.accent, color:"#fff", borderRadius:"50%", width:16, height:16, fontSize:10, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>{activeFilterCount}</span>}
           </button>
         </div>
-        <div style={{ display:"flex", gap:6 }}>
-          {["전체","지출","수입"].map(f=>(
-            <button key={f} onClick={()=>setTypeFilter(f)}
-              style={{ padding:"6px 14px", borderRadius:20, border:`1px solid ${typeFilter===f?C.accent:C.border}`, background:typeFilter===f?C.accentSoft:"transparent", color:typeFilter===f?C.accent:C.textMuted, fontSize:12, cursor:"pointer" }}>{f}</button>
-          ))}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div style={{ display:"flex", gap:6 }}>
+            {["전체","지출","수입"].map(f=>(
+              <button key={f} onClick={()=>setTypeFilter(f)}
+                style={{ padding:"6px 14px", borderRadius:20, border:`1px solid ${typeFilter===f?C.accent:C.border}`, background:typeFilter===f?C.accentSoft:"transparent", color:typeFilter===f?C.accent:C.textMuted, fontSize:12, cursor:"pointer" }}>{f}</button>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <button onClick={()=>{ const all=new Set(filtered.map(t=>t.date?.slice(0,7))); setExpandedMonths(all); }}
+              style={{ padding:"5px 10px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:11, cursor:"pointer" }}>펼치기</button>
+            <button onClick={()=>setExpandedMonths(new Set())}
+              style={{ padding:"5px 10px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:11, cursor:"pointer" }}>접기</button>
+          </div>
         </div>
       </div>
 
