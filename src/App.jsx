@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Ca
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.22";
+const APP_VERSION = "1.10.23";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3938,7 +3938,7 @@ export default function App() {
               <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
                 style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:2, border:"none", background:"transparent", cursor:"pointer", padding:"6px 0" }}>
                 {tab.id==="input"
-                  ? <div style={{ width:40, height:40, borderRadius:13, background:activeTab==="input"?C.accent:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, color:"#fff", marginBottom:-4, transition:"background 0.2s" }}>＋</div>
+                  ? <div style={{ width:46, height:46, borderRadius:15, background:C.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, fontWeight:300, color:"#fff", marginBottom:-4, boxShadow:activeTab==="input"?`0 4px 14px ${C.accent}66`:`0 2px 8px ${C.accent}44`, transform:activeTab==="input"?"scale(1.05)":"scale(1)", transition:"all 0.2s" }}>＋</div>
                   : <>
                       <span style={{ fontSize:activeTab===tab.id?22:19, filter:activeTab===tab.id?"none":"grayscale(1) opacity(0.45)", transition:"all 0.2s", lineHeight:1 }}>{tab.icon}</span>
                       <span style={{ fontSize:9, color:activeTab===tab.id?C.accent:C.textMuted, fontWeight:activeTab===tab.id?700:400, transition:"color 0.2s" }}>{tab.label}</span>
