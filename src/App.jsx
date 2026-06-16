@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.26";
+const APP_VERSION = "1.10.27";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -432,12 +432,9 @@ function HomeScreen() {
         </div>
       )}
 
-      <div style={{ padding:"28px 20px 0", marginBottom:24 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-          <div>
-            <p style={{ color:C.textMuted, fontSize:12, margin:0, letterSpacing:1, textTransform:"uppercase" }}></p>
-            <h2 style={{ color:C.text, fontSize:22, margin:"4px 0 0", fontWeight:700 }}>{familyName} 가계부</h2>
-          </div>
+      <div style={{ padding:"16px 20px 0", marginBottom:14 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <h2 style={{ color:C.text, fontSize:22, margin:0, fontWeight:700 }}>{familyName} 가계부</h2>
           <div style={{ width:38, height:38, borderRadius:12, background:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👨‍👩‍👧</div>
         </div>
       </div>
@@ -510,13 +507,13 @@ function HomeScreen() {
                     interval={Math.ceil(dailyExpense.length/8)}/>
                   <YAxis tick={{ fontSize:9, fill:C.textMuted }} axisLine={false} tickLine={false}
                     tickFormatter={(v)=> v>=10000 ? `${Math.round(v/10000)}만` : v}/>
-                  <Tooltip formatter={(v)=>`${fmt(v)}원`} labelFormatter={(d)=>`${monthLabel} ${d}일`}
+                  <Tooltip formatter={(v)=>[`${fmt(v)}원`,"지출"]} labelFormatter={(d)=>`${monthLabel} ${d}일`}
                     contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
                   <Bar dataKey="amount" radius={[3,3,0,0]}>
                     {dailyExpense.map((d,i)=>{
                       const isToday = Number(d.day)===today;
-                      const color = isToday ? C.accent : d.isWeekend ? "#7C9EFF" : C.expense;
-                      const opacity = isToday ? 1 : d.isWeekend ? 0.7 : 0.55;
+                      const color = isToday ? C.accent : d.isWeekend ? "#E8834A" : "#7CC1E8";
+                      const opacity = isToday ? 1 : 0.65;
                       return <Cell key={i} fill={color} fillOpacity={opacity}/>;
                     })}
                   </Bar>
