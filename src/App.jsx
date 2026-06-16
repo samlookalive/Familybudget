@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.18";
+const APP_VERSION = "1.10.19";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -299,7 +299,22 @@ function HomeScreen() {
   const summary  = calcSummary(monthTx);
   const catStats = calcCategoryStats(monthTx, allCategories);
   const { fixed, variable } = calcFixedVariable(monthTx, recurring);
-  const savingsRate = summary.income > 0 ? Math.round(((summary.income-summary.expense)/summary.income)*100) : 0;
+  // 최근 3개월(이번달 제외) 평균 수입 계산
+  const calcAvgIncome = () => {
+    const now2 = new Date();
+    const months = [];
+    for (let i=1; i<=3; i++) {
+      const d = new Date(now2.getFullYear(), now2.getMonth()-i, 1);
+      months.push(d.toISOString().slice(0,7));
+    }
+    const flat = transactions.flatMap(t=>t.is_group?t.children:[t]);
+    const sums = months.map(ym => flat.filter(t=>t.type==="income" && t.date?.startsWith(ym)).reduce((s,t)=>s+t.amount,0));
+    const validSums = sums.filter(s=>s>0);
+    if (validSums.length===0) return summary.income; // 과거 데이터 없으면 이번달 수입으로 대체
+    return Math.round(validSums.reduce((s,v)=>s+v,0) / validSums.length);
+  };
+  const avgIncome = calcAvgIncome();
+  const savingsRate = avgIncome > 0 ? Math.round(((avgIncome-summary.expense)/avgIncome)*100) : 0;
   const [familyName, setFamilyName] = useState("우리집");
 
   useEffect(() => {
@@ -409,7 +424,7 @@ function HomeScreen() {
       </div>
 
       {/* 메인 카드 — 지출금액 + 저축률 */}
-      <div style={{ margin:"0 16px 16px", background:"linear-gradient(135deg,#EEF2FF,#E8EDFF)", borderRadius:20, padding:"24px", border:`1px solid ${C.border}` }}>
+      <div style={{ margin:"0 16px 18px", background:"linear-gradient(135deg,#EEF2FF,#E8EDFF)", borderRadius:20, padding:"26px 24px", border:`1px solid ${C.border}`, boxShadow:"0 2px 16px rgba(76,99,210,0.08)" }}>
         <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px", letterSpacing:1, textTransform:"uppercase" }}>이번 달 지출</p>
 
         {/* 지출 금액 크게 */}
@@ -422,7 +437,7 @@ function HomeScreen() {
           <span style={{ color: savingsRate<0?C.expense:savingsRate<20?"#E67E22":C.income, fontSize:22, fontWeight:800, fontFamily:"'DM Mono',monospace" }}>
             {savingsRate}%
           </span>
-          <span style={{ color:C.textMuted, fontSize:12 }}>저축률</span>
+          <span style={{ color:C.textMuted, fontSize:12 }}>저축률 (평균수입 기준)</span>
           {savingsRate<0 && <span style={{ background:C.expense, color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>적자</span>}
           {savingsRate>=0 && savingsRate<20 && <span style={{ background:"#E67E22", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>주의</span>}
         </div>
@@ -448,7 +463,7 @@ function HomeScreen() {
         const isOver     = budgetPct >= 100;
         const barColor   = isOver ? C.expense : isWarn ? "#E67E22" : C.accent;
         return (
-          <div style={{ margin:"0 16px 16px", background:C.surface, borderRadius:16, padding:"16px 18px", border:`1px solid ${isOver?C.expense:isWarn?"#E67E22":C.border}` }}>
+          <div style={{ margin:"0 16px 16px", background:C.surface, borderRadius:16, padding:"16px 18px", border:`1px solid ${isOver?C.expense:isWarn?"#E67E22":C.border}`, boxShadow:"0 1px 8px rgba(0,0,0,0.04)" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
               <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                 <span style={{ fontSize:15 }}>💰</span>
@@ -478,7 +493,7 @@ function HomeScreen() {
           <div key={item.label} onClick={()=>setDrillDown(item.key)}
             style={{ background:C.surface, borderRadius:16, padding:"16px", border:`1px solid ${C.border}`,
               cursor:"pointer", transition:"all 0.15s",
-              boxShadow: drillDown===item.key ? `0 0 0 2px ${item.color}` : "none" }}>
+              boxShadow: drillDown===item.key ? `0 0 0 2px ${item.color}` : "0 1px 8px rgba(0,0,0,0.04)" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
               <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                 <span style={{ fontSize:16 }}>{item.icon}</span>
@@ -497,7 +512,7 @@ function HomeScreen() {
         const now = new Date();
         const monthLabel = `${now.getMonth()+1}월`;
         return (
-          <div style={{ margin:"0 16px", background:C.surface, borderRadius:16, padding:"18px", border:`1px solid ${C.border}` }}>
+          <div style={{ margin:"0 16px", background:C.surface, borderRadius:16, padding:"18px", border:`1px solid ${C.border}`, boxShadow:"0 1px 8px rgba(0,0,0,0.04)" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
               <p style={{ color:C.text, fontSize:14, fontWeight:600, margin:0 }}>카테고리별 지출</p>
               <span style={{ color:C.textMuted, fontSize:12 }}>{monthLabel}</span>
