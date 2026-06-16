@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.14";
+const APP_VERSION = "1.10.15";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -857,11 +857,10 @@ function TransactionsScreen() {
           </div>
         ) : (
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <span style={{ color:C.textMuted, fontSize:12 }}>{selectedYear}년 전체</span>
-            <div style={{ display:"flex", gap:16 }}>
-              <span style={{ color:C.expense, fontSize:13, fontWeight:700 }}>지출 {fmt(summary.expense)}원</span>
-              <span style={{ color:C.income, fontSize:13, fontWeight:700 }}>수입 {fmt(summary.income)}원</span>
-              <span style={{ color:C.textMuted, fontSize:12 }}>{yearFiltered.length}건</span>
+            <span style={{ color:C.textMuted, fontSize:12 }}>{selectedYear}년 전체 · {yearFiltered.length}건</span>
+            <div style={{ display:"flex", gap:12 }}>
+              <span style={{ color:C.expense, fontSize:13, fontWeight:700 }}>지출 {Math.round(summary.expense/10000)}만원</span>
+              <span style={{ color:C.income, fontSize:13, fontWeight:700 }}>수입 {Math.round(summary.income/10000)}만원</span>
             </div>
           </div>
         )}
