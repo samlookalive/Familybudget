@@ -1,10 +1,10 @@
 import React, { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { AreaChart, Area, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.24";
+const APP_VERSION = "1.10.25";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -290,6 +290,23 @@ function calcCategoryTrend(transactions, allCategories, year) {
   return { data: result, categories: [...catSet] };
 }
 
+// 이번달 1일~현재까지(또는 말일까지) 일별 지출 집계 → BarChart용
+function calcDailyExpense(transactions) {
+  const now = new Date();
+  const year = now.getFullYear(), month = now.getMonth()+1;
+  const lastDay = new Date(year, month, 0).getDate();
+  const ym = `${year}-${String(month).padStart(2,"0")}`;
+  const flat = transactions.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense" && t.date?.startsWith(ym));
+
+  const result = [];
+  for (let d=1; d<=lastDay; d++) {
+    const dateStr = `${ym}-${String(d).padStart(2,"0")}`;
+    const amount = flat.filter(t=>t.date===dateStr).reduce((s,t)=>s+t.amount,0);
+    result.push({ day:String(d), amount });
+  }
+  return result;
+}
+
 // ══════════════════════════════════════════════════════════════
 // 홈 화면
 // ══════════════════════════════════════════════════════════════
@@ -299,6 +316,7 @@ function HomeScreen() {
   const summary  = calcSummary(monthTx);
   const catStats = calcCategoryStats(monthTx, allCategories);
   const { fixed, variable } = calcFixedVariable(monthTx, recurring);
+  const dailyExpense = calcDailyExpense(transactions);
   // 최근 3개월(이번달 제외) 평균 수입 계산
   const calcAvgIncome = () => {
     const now2 = new Date();
@@ -466,6 +484,38 @@ function HomeScreen() {
             <div style={{ display:"flex", justifyContent:"space-between" }}>
               <span style={{ color:C.textMuted, fontSize:11 }}>사용 {fmt(summary.expense)}원</span>
               <span style={{ color:C.textMuted, fontSize:11 }}>한도 {fmt(budgets.total)}원</span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 일별 지출 막대그래프 */}
+      {(() => {
+        const now = new Date();
+        const monthLabel = `${now.getMonth()+1}월`;
+        const today = now.getDate();
+        return (
+          <div style={{ margin:"0 16px 12px", background:C.surface, borderRadius:16, padding:"18px", border:`1px solid ${C.border}`, boxShadow:"0 1px 8px rgba(0,0,0,0.04)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <p style={{ color:C.text, fontSize:14, fontWeight:600, margin:0 }}>일별 지출</p>
+              <span style={{ color:C.textMuted, fontSize:12 }}>{monthLabel}</span>
+            </div>
+            <div style={{ width:"100%", height:130 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dailyExpense} margin={{ top:4, right:4, left:-28, bottom:0 }}>
+                  <XAxis dataKey="day" tick={{ fontSize:9, fill:C.textMuted }} axisLine={{stroke:C.border}} tickLine={false}
+                    interval={Math.ceil(dailyExpense.length/8)}/>
+                  <YAxis tick={{ fontSize:9, fill:C.textMuted }} axisLine={false} tickLine={false}
+                    tickFormatter={(v)=> v>=10000 ? `${Math.round(v/10000)}만` : v}/>
+                  <Tooltip formatter={(v)=>`${fmt(v)}원`} labelFormatter={(d)=>`${monthLabel} ${d}일`}
+                    contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
+                  <Bar dataKey="amount" radius={[3,3,0,0]}>
+                    {dailyExpense.map((d,i)=>(
+                      <Cell key={i} fill={Number(d.day)===today ? C.accent : C.expense} fillOpacity={Number(d.day)===today ? 1 : 0.55}/>
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         );
@@ -3938,7 +3988,7 @@ export default function App() {
               <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
                 style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:2, border:"none", background:"transparent", cursor:"pointer", padding:"6px 0" }}>
                 {tab.id==="input"
-                  ? <div style={{ width:38, height:38, borderRadius:12, background:C.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:19, fontWeight:300, color:"#fff", boxShadow:activeTab==="input"?`0 4px 14px ${C.accent}66`:`0 2px 8px ${C.accent}44`, transform:activeTab==="input"?"scale(1.05)":"scale(1)", transition:"all 0.2s" }}>＋</div>
+                  ? <div style={{ width:46, height:46, borderRadius:15, background:activeTab==="input"?C.accent:C.accentSoft, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, fontWeight:300, color:activeTab==="input"?"#fff":C.accent, boxShadow:activeTab==="input"?`0 4px 14px ${C.accent}66`:"none", transform:activeTab==="input"?"scale(1.05)":"scale(1)", transition:"all 0.2s" }}>＋</div>
                   : <>
                       <span style={{ fontSize:activeTab===tab.id?22:19, filter:activeTab===tab.id?"none":"grayscale(1) opacity(0.45)", transition:"all 0.2s", lineHeight:1 }}>{tab.icon}</span>
                       <span style={{ fontSize:9, color:activeTab===tab.id?C.accent:C.textMuted, fontWeight:activeTab===tab.id?700:400, transition:"color 0.2s" }}>{tab.label}</span>
