@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.25";
+const APP_VERSION = "1.10.26";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -302,7 +302,8 @@ function calcDailyExpense(transactions) {
   for (let d=1; d<=lastDay; d++) {
     const dateStr = `${ym}-${String(d).padStart(2,"0")}`;
     const amount = flat.filter(t=>t.date===dateStr).reduce((s,t)=>s+t.amount,0);
-    result.push({ day:String(d), amount });
+    const dow = new Date(year, month-1, d).getDay(); // 0=일, 6=토
+    result.push({ day:String(d), amount, isWeekend: dow===0||dow===6 });
   }
   return result;
 }
@@ -442,22 +443,24 @@ function HomeScreen() {
       </div>
 
       {/* 메인 카드 — 지출금액 + 저축률 */}
-      <div style={{ margin:"0 16px 18px", background:"linear-gradient(135deg,#EEF2FF,#E8EDFF)", borderRadius:20, padding:"26px 24px", border:`1px solid ${C.border}`, boxShadow:"0 2px 16px rgba(76,99,210,0.08)" }}>
-        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 6px", letterSpacing:1, textTransform:"uppercase" }}>이번 달 지출</p>
-
-        {/* 지출 금액 크게 */}
-        <p style={{ color:C.expense, fontSize:36, fontWeight:800, margin:"0 0 4px", fontFamily:"'DM Mono',monospace", letterSpacing:-1, lineHeight:1 }}>
-          {fmt(summary.expense)}<span style={{ fontSize:17, fontWeight:400, color:C.textMuted, marginLeft:4 }}>원</span>
-        </p>
-
-        {/* 저축률 */}
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ color: savingsRate<0?C.expense:savingsRate<20?"#E67E22":C.income, fontSize:22, fontWeight:800, fontFamily:"'DM Mono',monospace" }}>
-            {savingsRate}%
-          </span>
-          <span style={{ color:C.textMuted, fontSize:12 }}>저축률 (평균수입 기준)</span>
-          {savingsRate<0 && <span style={{ background:C.expense, color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>적자</span>}
-          {savingsRate>=0 && savingsRate<20 && <span style={{ background:"#E67E22", color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>주의</span>}
+      <div style={{ margin:"0 16px 16px", background:"linear-gradient(135deg,#EEF2FF,#E8EDFF)", borderRadius:18, padding:"18px 20px", border:`1px solid ${C.border}`, boxShadow:"0 2px 16px rgba(76,99,210,0.08)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end" }}>
+          <div>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px", letterSpacing:1, textTransform:"uppercase" }}>이번 달 지출</p>
+            <p style={{ color:C.expense, fontSize:28, fontWeight:800, margin:0, fontFamily:"'DM Mono',monospace", letterSpacing:-1, lineHeight:1 }}>
+              {fmt(summary.expense)}<span style={{ fontSize:14, fontWeight:400, color:C.textMuted, marginLeft:3 }}>원</span>
+            </p>
+          </div>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:4, justifyContent:"flex-end", marginBottom:2 }}>
+              <span style={{ color: savingsRate<0?C.expense:savingsRate<20?"#E67E22":C.income, fontSize:18, fontWeight:800, fontFamily:"'DM Mono',monospace" }}>
+                {savingsRate}%
+              </span>
+              {savingsRate<0 && <span style={{ background:C.expense, color:"#fff", fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:8 }}>적자</span>}
+              {savingsRate>=0 && savingsRate<20 && <span style={{ background:"#E67E22", color:"#fff", fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:8 }}>주의</span>}
+            </div>
+            <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>저축률</p>
+          </div>
         </div>
       </div>
 
@@ -510,9 +513,12 @@ function HomeScreen() {
                   <Tooltip formatter={(v)=>`${fmt(v)}원`} labelFormatter={(d)=>`${monthLabel} ${d}일`}
                     contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
                   <Bar dataKey="amount" radius={[3,3,0,0]}>
-                    {dailyExpense.map((d,i)=>(
-                      <Cell key={i} fill={Number(d.day)===today ? C.accent : C.expense} fillOpacity={Number(d.day)===today ? 1 : 0.55}/>
-                    ))}
+                    {dailyExpense.map((d,i)=>{
+                      const isToday = Number(d.day)===today;
+                      const color = isToday ? C.accent : d.isWeekend ? "#7C9EFF" : C.expense;
+                      const opacity = isToday ? 1 : d.isWeekend ? 0.7 : 0.55;
+                      return <Cell key={i} fill={color} fillOpacity={opacity}/>;
+                    })}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
