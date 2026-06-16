@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.16";
+const APP_VERSION = "1.10.17";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -77,6 +77,12 @@ const sb = {
     const { data, error } = await supabase.rpc(fn, params);
     if (error) throw new Error(error.message);
     return data;
+  },
+
+  async updateUser(data, token) {
+    const { data: result, error } = await supabase.auth.updateUser(data);
+    if (error) throw new Error(error.message);
+    return result;
   },
 
   // Auth
@@ -2974,6 +2980,9 @@ function FamilyInfoCard() {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editFamilyName, setEditFamilyName] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [newPwConfirm, setNewPwConfirm] = useState("");
+  const [pwMsg, setPwMsg] = useState("");
   const [confirm, setConfirm] = useState(null); // null | "leave"
   const [working, setWorking] = useState(false);
   const [leaveCode, setLeaveCode] = useState("");
@@ -3069,14 +3078,31 @@ function FamilyInfoCard() {
                 style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", color:C.text, fontSize:15, boxSizing:"border-box", marginBottom:14 }} />
               <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 6px" }}>가족 이름</p>
               <input value={editFamilyName} onChange={e=>setEditFamilyName(e.target.value)}
-                style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", color:C.text, fontSize:15, boxSizing:"border-box", marginBottom:14 }} />
-              <div style={{ display:"flex", gap:10 }}>
-                <button onClick={()=>setEditing(false)}
+                style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", color:C.text, fontSize:15, boxSizing:"border-box", marginBottom:20 }} />
+
+              {/* 비밀번호 변경 섹션 */}
+              <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:16, marginBottom:6 }}>
+                <p style={{ color:C.textMuted, fontSize:11, fontWeight:600, margin:"0 0 12px" }}>🔒 비밀번호 변경 (선택)</p>
+                <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 6px" }}>새 비밀번호</p>
+                <input type="password" value={newPw} onChange={e=>{ setNewPw(e.target.value); setPwMsg(""); }}
+                  placeholder="6자 이상"
+                  style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", color:C.text, fontSize:15, boxSizing:"border-box", marginBottom:10 }} />
+                <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 6px" }}>새 비밀번호 확인</p>
+                <input type="password" value={newPwConfirm} onChange={e=>{ setNewPwConfirm(e.target.value); setPwMsg(""); }}
+                  placeholder="비밀번호 재입력"
+                  style={{ width:"100%", background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding:"12px 14px", color:C.text, fontSize:15, boxSizing:"border-box", marginBottom:6 }} />
+                {pwMsg && <p style={{ color:pwMsg.includes("완료")?C.income:C.expense, fontSize:12, margin:"0 0 10px" }}>{pwMsg}</p>}
+              </div>
+
+              <div style={{ display:"flex", gap:10, marginTop:8 }}>
+                <button onClick={()=>{ setEditing(false); setNewPw(""); setNewPwConfirm(""); setPwMsg(""); }}
                   style={{ flex:1, padding:"13px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer", fontWeight:600 }}>
                   취소
                 </button>
                 <button onClick={async () => {
                   const tok = localStorage.getItem("sb_token");
+
+                  // 이름 저장
                   if (editName.trim()) {
                     await sb.update("profiles", { name: editName.trim() }, { id: profile.id }, tok);
                     setProfile(p => ({ ...p, name: editName.trim() }));
@@ -3085,6 +3111,20 @@ function FamilyInfoCard() {
                     await sb.update("families", { name: editFamilyName.trim() }, { id: family.id }, tok);
                     setFamily(f => ({ ...f, name: editFamilyName.trim() }));
                   }
+
+                  // 비밀번호 변경
+                  if (newPw || newPwConfirm) {
+                    if (newPw.length < 6) { setPwMsg("비밀번호는 6자 이상이어야 해요"); return; }
+                    if (newPw !== newPwConfirm) { setPwMsg("비밀번호가 일치하지 않아요"); return; }
+                    try {
+                      await sb.updateUser({ password: newPw }, tok);
+                      setPwMsg("비밀번호 변경 완료 ✅");
+                      setNewPw(""); setNewPwConfirm("");
+                      setTimeout(() => { setEditing(false); setPwMsg(""); }, 1000);
+                      return;
+                    } catch(e) { setPwMsg("비밀번호 변경 실패: " + (e.message||"")); return; }
+                  }
+
                   setEditing(false);
                 }}
                   style={{ flex:1, padding:"13px", borderRadius:12, border:"none", background:C.accent, color:"#fff", fontSize:14, cursor:"pointer", fontWeight:700 }}>
