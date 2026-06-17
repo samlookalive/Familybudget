@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.27";
+const APP_VERSION = "1.10.28";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1217,10 +1217,12 @@ function InputScreen() {
       const res=await fetch("/api/parse-image",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({imageBase64:imgBase64,mode:"single"})});
       const data=await res.json();
+      console.log("parse-image 응답:", data);
+      if(data.error){setImgError("오류: "+data.error);setIsLoading(false);setLoadingMsg("");return;}
       if(!data.transactions?.length){setImgError("결제 내역을 찾지 못했어요.");setIsLoading(false);setLoadingMsg("");return;}
       const enriched=data.transactions.map(item=>({...item,icon:CAT_ICON_MAP[item.category]||"📦"}));
       setParsedList(enriched);setCheckedIdx(enriched.map((_,i)=>i));setStep("img_confirm");
-    }catch{setImgError("분석 중 오류가 발생했어요.");}
+    }catch(e){console.log("parse-image 호출 에러:", e);setImgError("분석 중 오류: "+e.message);}
     setIsLoading(false);setLoadingMsg("");
   };
 
@@ -1241,9 +1243,11 @@ function InputScreen() {
       const res=await fetch("/api/parse-image",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({imageBase64:groupImgBase64,mode:"group"})});
       const data=await res.json();
+      console.log("parse-image 응답:", data);
+      if(data.error){setGroupImgError("오류: "+data.error);setGroupLoading(false);setGroupLoadMsg("");return;}
       if(!data.group?.children?.length){setGroupImgError("항목을 찾지 못했어요.");setGroupLoading(false);setGroupLoadMsg("");return;}
       setGroupParsed(data.group);setGroupStep("confirm");
-    }catch{setGroupImgError("분석 중 오류가 발생했어요.");}
+    }catch(e){console.log("parse-image 호출 에러:", e);setGroupImgError("분석 중 오류: "+e.message);}
     setGroupLoading(false);setGroupLoadMsg("");
   };
 
