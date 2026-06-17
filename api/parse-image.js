@@ -32,7 +32,7 @@ JSON만 반환해. 다른 텍스트 없이.
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": "https://familybudget-ochre.vercel.app",
+        "HTTP-Referer": "https://togetbudget.vercel.app",
       },
       body: JSON.stringify({
         model: "meta-llama/llama-4-maverick:free",
