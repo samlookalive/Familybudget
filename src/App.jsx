@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.28";
+const APP_VERSION = "1.10.29";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1247,7 +1247,10 @@ function InputScreen() {
       if(data.error){setGroupImgError("오류: "+data.error);setGroupLoading(false);setGroupLoadMsg("");return;}
       if(!data.group?.children?.length){setGroupImgError("항목을 찾지 못했어요.");setGroupLoading(false);setGroupLoadMsg("");return;}
       setGroupParsed(data.group);setGroupStep("confirm");
-    }catch(e){console.log("parse-image 호출 에러:", e);setGroupImgError("분석 중 오류: "+e.message);}
+    }catch(e){
+      console.log("parse-image 호출 에러 name:", e.name, "message:", e.message, "전체:", String(e));
+      setGroupImgError("분석 중 오류: "+e.name+" - "+e.message);
+    }
     setGroupLoading(false);setGroupLoadMsg("");
   };
 
