@@ -67,7 +67,7 @@ ${rulesText}
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": "https://familybudget-ochre.vercel.app",
+        "HTTP-Referer": "https://togetbudget.vercel.app",
       },
       body: JSON.stringify({
         model: "qwen/qwen-2.5-72b-instruct",
