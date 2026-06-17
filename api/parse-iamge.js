@@ -25,8 +25,9 @@ JSON만 반환해. 다른 텍스트 없이.
 
   const prompt = mode === "group" ? groupPrompt : singlePrompt;
 
+  let response;
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -46,24 +47,36 @@ JSON만 반환해. 다른 텍스트 없이.
         max_tokens: 1024,
       }),
     });
-
-    const data = await response.json();
-    const raw = data.choices?.[0]?.message?.content || (mode === "group" ? "{}" : "[]");
-    const clean = raw.replace(/```json|```/g, "").trim();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(clean);
-    } catch {
-      parsed = mode === "group" ? {} : [];
-    }
-
-    if (mode === "group") {
-      return res.status(200).json({ group: parsed });
-    } else {
-      return res.status(200).json({ transactions: Array.isArray(parsed) ? parsed : [] });
-    }
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    return res.status(500).json({ error: "OpenRouter 호출 실패: " + e.message });
+  }
+
+  // 응답을 text로 먼저 받아서 안전하게 처리
+  const rawText = await response.text();
+  if (!response.ok) {
+    return res.status(500).json({ error: `OpenRouter ${response.status}: ${rawText.slice(0,300)}` });
+  }
+
+  let data;
+  try {
+    data = JSON.parse(rawText);
+  } catch (e) {
+    return res.status(500).json({ error: "OpenRouter 응답 JSON 파싱 실패: " + rawText.slice(0,300) });
+  }
+
+  const raw = data.choices?.[0]?.message?.content || (mode === "group" ? "{}" : "[]");
+  const clean = raw.replace(/```json|```/g, "").trim();
+
+  let parsed;
+  try {
+    parsed = JSON.parse(clean);
+  } catch (e) {
+    return res.status(500).json({ error: "결과 파싱 실패: " + clean.slice(0,300) });
+  }
+
+  if (mode === "group") {
+    return res.status(200).json({ group: parsed });
+  } else {
+    return res.status(200).json({ transactions: Array.isArray(parsed) ? parsed : [] });
   }
 }
