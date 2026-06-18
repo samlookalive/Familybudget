@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.30";
+const APP_VERSION = "1.10.31";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -500,7 +500,7 @@ function HomeScreen() {
               <p style={{ color:C.text, fontSize:14, fontWeight:600, margin:0 }}>일별 지출</p>
               <span style={{ color:C.textMuted, fontSize:12 }}>{monthLabel}</span>
             </div>
-            <div style={{ width:"100%", height:130 }}>
+            <div style={{ width:"100%", height:130, touchAction:"none" }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dailyExpense} margin={{ top:4, right:4, left:-28, bottom:0 }}>
                   <XAxis dataKey="day" tick={{ fontSize:9, fill:C.textMuted }} axisLine={{stroke:C.border}} tickLine={false}
@@ -2044,7 +2044,7 @@ function StatsScreen() {
         </div>
 
         {trendMode==="total" ? (
-          <div style={{ width:"100%", height:220 }}>
+          <div style={{ width:"100%", height:220, touchAction:"none" }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={yearlyTrend} margin={{ top:8, right:8, left:-12, bottom:0 }}>
                 <defs>
@@ -2081,7 +2081,7 @@ function StatsScreen() {
                 );
               })}
             </div>
-            <div style={{ width:"100%", height:220 }}>
+            <div style={{ width:"100%", height:220, touchAction:"none" }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={categoryTrend.data} margin={{ top:8, right:8, left:-12, bottom:0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
@@ -4020,4 +4020,3 @@ export default function App() {
     </AppContext.Provider>
   );
 }
-
