@@ -25,36 +25,49 @@ JSON만 반환해. 다른 텍스트 없이.
 
   const prompt = mode === "group" ? groupPrompt : singlePrompt;
 
-  let response;
-  try {
-    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-        "HTTP-Referer": "https://togetbudget.vercel.app",
-      },
-      body: JSON.stringify({
-        model: "google/gemma-4-31b-it:free",
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
-            { type: "text", text: prompt }
-          ]
-        }],
-        temperature: 0,
-        max_tokens: 1024,
-      }),
-    });
-  } catch (e) {
-    return res.status(500).json({ error: "OpenRouter 호출 실패: " + e.message });
+  // 1차 모델이 실패(429/5xx 등)하면 2차 모델로 자동 재시도
+  const MODELS = ["nvidia/nemotron-nano-12b-v2-vl:free", "google/gemma-4-31b-it:free"];
+
+  let response, rawText, usedModel, lastErrorText;
+  for (const model of MODELS) {
+    try {
+      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+          "HTTP-Referer": "https://togetbudget.vercel.app",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
+              { type: "text", text: prompt }
+            ]
+          }],
+          temperature: 0,
+          max_tokens: 1024,
+        }),
+      });
+    } catch (e) {
+      lastErrorText = "OpenRouter 호출 실패: " + e.message;
+      continue; // 네트워크 에러 → 다음 모델로
+    }
+
+    // 응답을 text로 먼저 받아서 안전하게 처리
+    rawText = await response.text();
+    if (response.ok) {
+      usedModel = model;
+      break; // 성공 → 더 이상 재시도 안 함
+    }
+    lastErrorText = `OpenRouter ${response.status} (${model}): ${rawText.slice(0,300)}`;
+    // 실패 → 다음 모델로 재시도
   }
 
-  // 응답을 text로 먼저 받아서 안전하게 처리
-  const rawText = await response.text();
-  if (!response.ok) {
-    return res.status(500).json({ error: `OpenRouter ${response.status}: ${rawText.slice(0,300)}` });
+  if (!response || !response.ok) {
+    return res.status(500).json({ error: lastErrorText || "모든 모델 호출 실패" });
   }
 
   let data;
