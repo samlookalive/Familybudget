@@ -88,8 +88,8 @@ JSON만 반환해. 다른 텍스트 없이.
   }
 
   if (mode === "group") {
-    return res.status(200).json({ group: parsed });
+    return res.status(200).json({ group: parsed, _debug: { usedModel, rawModelOutput: raw } });
   } else {
-    return res.status(200).json({ transactions: Array.isArray(parsed) ? parsed : [] });
+    return res.status(200).json({ transactions: Array.isArray(parsed) ? parsed : [], _debug: { usedModel, rawModelOutput: raw } });
   }
 }
