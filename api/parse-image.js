@@ -35,7 +35,7 @@ JSON만 반환해. 다른 텍스트 없이.
         "HTTP-Referer": "https://togetbudget.vercel.app",
       },
       body: JSON.stringify({
-        model: "meta-llama/llama-4-maverick:free",
+        model: "google/gemma-4-31b-it:free",
         messages: [{
           role: "user",
           content: [
