@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.37";
+const APP_VERSION = "1.10.38";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3967,6 +3967,89 @@ export default function App() {
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [profile?.family_id]);
+
+  // standalone(홈화면 아이콘) 모드 — pull-to-refresh 직접 구현
+  useEffect(() => {
+    const isStandalone = window.navigator.standalone ||
+      window.matchMedia("(display-mode: standalone)").matches;
+    if (!isStandalone) return;
+
+    let startY = 0;
+    let pulling = false;
+    const THRESHOLD = 75;
+    let indicatorEl = null;
+
+    const showIndicator = (text, color) => {
+      if (!indicatorEl) {
+        indicatorEl = document.createElement("div");
+        indicatorEl.style.cssText = `
+          position:fixed;top:0;left:0;right:0;display:flex;align-items:center;
+          justify-content:center;gap:6px;padding:10px 0 8px;
+          font-size:13px;font-weight:600;z-index:99999;
+          font-family:'Pretendard','Apple SD Gothic Neo',sans-serif;
+          transition:background 0.2s;`;
+        document.body.appendChild(indicatorEl);
+      }
+      indicatorEl.style.background = color;
+      indicatorEl.style.color = "#fff";
+      indicatorEl.textContent = text;
+    };
+
+    const hideIndicator = () => {
+      if (indicatorEl) { document.body.removeChild(indicatorEl); indicatorEl = null; }
+    };
+
+    // 터치 시작 — 스크롤 맨 위일 때만 감지
+    const onTouchStart = (e) => {
+      let el = e.target;
+      while (el && el !== document.body) {
+        const style = window.getComputedStyle(el);
+        if ((style.overflowY === "auto" || style.overflowY === "scroll") && el.scrollTop > 0) {
+          startY = 0; return; // 스크롤 중간이면 무시
+        }
+        el = el.parentElement;
+      }
+      startY = e.touches[0].clientY;
+    };
+
+    const onTouchMove = (e) => {
+      if (!startY) return;
+      const diff = e.touches[0].clientY - startY;
+      if (diff > 15) {
+        pulling = true;
+        if (diff >= THRESHOLD) {
+          showIndicator("↑ 놓으면 새로고침", C.income);
+        } else {
+          showIndicator("↓ 당겨서 새로고침", C.accent);
+        }
+      }
+    };
+
+    const onTouchEnd = (e) => {
+      if (pulling && startY) {
+        const diff = (e.changedTouches[0]?.clientY || startY) - startY;
+        if (diff >= THRESHOLD) {
+          showIndicator("새로고침 중...", C.accent);
+          setTimeout(() => window.location.reload(), 300);
+          return;
+        }
+      }
+      hideIndicator();
+      pulling = false;
+      startY = 0;
+    };
+
+    document.addEventListener("touchstart", onTouchStart, { passive: true });
+    document.addEventListener("touchmove",  onTouchMove,  { passive: true });
+    document.addEventListener("touchend",   onTouchEnd,   { passive: true });
+
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart);
+      document.removeEventListener("touchmove",  onTouchMove);
+      document.removeEventListener("touchend",   onTouchEnd);
+      hideIndicator();
+    };
+  }, []);
 
   // ── 로딩 중 ───────────────────────────────────────────────
   if (authLoading || profileLoading) return (
