@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.31";
+const APP_VERSION = "1.10.33";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -694,6 +694,46 @@ function HomeScreen() {
   );
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// 거래 수정 폼 — TransactionsScreen 밖에 정의해서 리렌더 시 포커스 유지
+// ══════════════════════════════════════════════════════════════
+function TxEditForm({ tx, isChild=false, parentId=null, onSave, onDelete, onCancel }) {
+  const { allCategories } = useApp();
+  const [form, setForm] = useState({
+    amount: tx.amount, memo: tx.memo, date: tx.date, category: tx.category
+  });
+  return (
+    <div style={{ background:C.accentSoft, borderRadius:12, padding:"12px", border:`1px solid ${C.accent}44` }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+        <div>
+          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>금액</p>
+          <input type="text" value={fmt(Number(form.amount))} onChange={e=>setForm(f=>({...f,amount:e.target.value.replace(/,/g,"")}))}
+            style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }} />
+        </div>
+        <div>
+          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>날짜</p>
+          <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}
+            style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
+        </div>
+      </div>
+      <div style={{ marginBottom:10 }}>
+        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>사용처</p>
+        <input type="text" value={form.memo} onChange={e=>setForm(f=>({...f,memo:e.target.value}))}
+          style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
+      </div>
+      <div style={{ display:"flex", gap:8, justifyContent:"space-between" }}>
+        <button onClick={()=>onDelete(tx.id, isChild, parentId, tx.memo)}
+          style={{ padding:"7px 12px", borderRadius:8, border:`1px solid ${C.expense}44`, background:"transparent", color:C.expense, fontSize:11, cursor:"pointer" }}>삭제</button>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onCancel} style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
+          <button onClick={()=>onSave(tx.id, isChild, parentId, form)} style={{ padding:"7px 14px", borderRadius:8, border:"none", background:C.accent, color:"#fff", fontSize:13, fontWeight:600, cursor:"pointer" }}>저장</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════
 // 거래 내역 화면
 // ══════════════════════════════════════════════════════════════
@@ -701,7 +741,6 @@ function TransactionsScreen() {
   const { transactions, setTransactions, allCategories, highlightIds } = useApp();
   const [expandedId,   setExpandedId]   = useState(null);
   const [editingId,    setEditingId]    = useState(null);
-  const [editForm,     setEditForm]     = useState({});
   const [typeFilter,   setTypeFilter]   = useState("전체");
   const [showSearch,   setShowSearch]   = useState(false);
   const [searchText,   setSearchText]   = useState("");
@@ -709,6 +748,8 @@ function TransactionsScreen() {
   const [maxAmount,    setMaxAmount]    = useState("");
   const [catFilter,    setCatFilter]    = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [addingChildId, setAddingChildId] = useState(null);
+  const [addChildForm,  setAddChildForm]  = useState({ memo:"", amount:"", category:"" });
 
   const now = new Date();
   const thisYear = now.getFullYear();
@@ -736,15 +777,52 @@ function TransactionsScreen() {
   const CAT_OPTIONS = [...new Set(yearFiltered.flatMap(t=>t.is_group?[t.category,...t.children.map(c=>c.category)]:[t.category]))];
   const activeFilterCount = [searchText,minAmount,maxAmount,catFilter].filter(Boolean).length;
 
-  const startEdit = (tx) => { setEditingId(tx.id); setEditForm({ amount:tx.amount, memo:tx.memo, date:tx.date, category:tx.category }); };
+  const saveChildAdd = async (parentId, parentDate) => {
+    if (!addChildForm.memo.trim() || !addChildForm.amount) return;
+    const newChild = {
+      id: uid(), memo: addChildForm.memo.trim(),
+      amount: Number(addChildForm.amount),
+      category: addChildForm.category || allCategories.find(c=>c.type==="expense")?.name || "기타지출",
+      date: parentDate, type: "expense",
+    };
+    setTransactions(prev => prev.map(tx => {
+      if (tx.id !== parentId) return tx;
+      const kids = [...tx.children, newChild];
+      return { ...tx, children: kids, amount: kids.reduce((s,c)=>s+c.amount,0), child_count: kids.length };
+    }));
+    // DB 저장
+    const tok = localStorage.getItem("sb_token");
+    if (tok) {
+      try {
+        const profile = await sb.select("profiles", `id=eq.${(await sb.getUser(tok))?.id}`, tok);
+        const fid = profile?.[0]?.family_id;
+        if (fid) {
+          await sb.insert("transactions", {
+            family_id: fid, user_id: profile[0].id, parent_id: parentId,
+            type: "expense", amount: newChild.amount,
+            memo: newChild.memo, date: newChild.date,
+            category: newChild.category, is_group: false,
+          }, tok);
+          // 부모 합계 업데이트
+          const updatedParent = transactions.find(t => t.id === parentId);
+          if (updatedParent) {
+            const newTotal = updatedParent.children.reduce((s,c)=>s+c.amount,0) + newChild.amount;
+            await sb.update("transactions", { amount: newTotal }, { id: parentId }, tok);
+          }
+        }
+      } catch(e) { console.log("묶음 항목 추가 DB 실패:", e.message); }
+    }
+    setAddingChildId(null);
+    setAddChildForm({ memo:"", amount:"", category:"" });
+  };
 
-  const saveEdit = (id, isChild, parentId) => {
+  const saveEdit = (id, isChild, parentId, formData) => {
     setTransactions(prev=>prev.map(tx=>{
       if (isChild && tx.id===parentId) {
-        const kids = tx.children.map(c=>c.id===id?{...c,...editForm,amount:Number(editForm.amount)}:c);
+        const kids = tx.children.map(c=>c.id===id?{...c,...formData,amount:Number(formData.amount)}:c);
         return {...tx, amount:kids.reduce((s,c)=>s+c.amount,0), children:kids};
       }
-      if (tx.id===id) return {...tx,...editForm,amount:Number(editForm.amount)};
+      if (tx.id===id) return {...tx,...formData,amount:Number(formData.amount)};
       return tx;
     }));
     setEditingId(null);
@@ -753,8 +831,8 @@ function TransactionsScreen() {
     const tok = localStorage.getItem("sb_token");
     if (tok) {
       sb.update("transactions", {
-        amount: Number(editForm.amount), memo: editForm.memo,
-        date: editForm.date, category: editForm.category,
+        amount: Number(formData.amount), memo: formData.memo,
+        date: formData.date, category: formData.category,
       }, { id }, tok).catch(()=>{});
     }
   };
@@ -791,36 +869,6 @@ function TransactionsScreen() {
     return true;
   });
 
-  const EditRow = ({ tx, isChild=false, parentId=null }) => (
-    <div style={{ background:C.accentSoft, borderRadius:12, padding:"12px", border:`1px solid ${C.accent}44` }}>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
-        <div>
-          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>금액</p>
-          <input type="text" value={fmt(Number(editForm.amount))} onChange={e=>setEditForm(f=>({...f,amount:e.target.value.replace(/,/g,"")}))}
-            style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }} />
-        </div>
-        <div>
-          <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>날짜</p>
-          <input type="date" value={editForm.date} onChange={e=>setEditForm(f=>({...f,date:e.target.value}))}
-            style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
-        </div>
-      </div>
-      <div style={{ marginBottom:10 }}>
-        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>사용처</p>
-        <input type="text" value={editForm.memo} onChange={e=>setEditForm(f=>({...f,memo:e.target.value}))}
-          style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
-      </div>
-      <div style={{ display:"flex", gap:8, justifyContent:"space-between" }}>
-        <button onClick={()=>requestDelete(tx.id,isChild,parentId,tx.memo)}
-          style={{ padding:"7px 12px", borderRadius:8, border:`1px solid ${C.expense}44`, background:"transparent", color:C.expense, fontSize:11, cursor:"pointer" }}>삭제</button>
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={()=>setEditingId(null)} style={{ padding:"7px 14px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
-          <button onClick={()=>saveEdit(tx.id,isChild,parentId)} style={{ padding:"7px 14px", borderRadius:8, border:"none", background:C.accent, color:"#fff", fontSize:13, fontWeight:600, cursor:"pointer" }}>저장</button>
-        </div>
-      </div>
-    </div>
-  );
-
   const TxRow = ({ tx, isChild=false, parentId=null }) => {
     const cat      = getCat(tx.category, allCategories);
     const isEditing = editingId===tx.id;
@@ -839,14 +887,14 @@ function TransactionsScreen() {
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               <p style={{ color:C.text, fontSize:isChild?13:14, fontWeight:500, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{tx.memo}</p>
-              {tx.is_group && <Tag color={C.accent}>묶음 {tx.child_count}건</Tag>}
+              {tx.is_group && <Tag color={C.accent}>{tx.child_count}건</Tag>}
             </div>
             <p style={{ color:C.textMuted, fontSize:11, margin:"2px 0 0" }}>{fmtDate(tx.date)} · {cat.name||tx.category}</p>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
             <AmountText amount={tx.amount} type={tx.type||"expense"} size={isChild?13:15} />
             {!tx.is_group && (
-              <button onClick={e=>{e.stopPropagation(); isEditing?setEditingId(null):startEdit(tx);}}
+              <button onClick={e=>{e.stopPropagation(); isEditing?setEditingId(null):setEditingId(tx.id);}}
                 style={{ padding:"5px 12px", borderRadius:7, border:`1px solid ${isEditing?C.accent:C.border}`, background:isEditing?C.accentSoft:"transparent", color:isEditing?C.accent:C.textMuted, fontSize:11, cursor:"pointer" }}>
                 {isEditing?"닫기":"수정"}
               </button>
@@ -860,7 +908,12 @@ function TransactionsScreen() {
             )}
           </div>
         </div>
-        {isEditing && <div style={{ padding:"0 16px 12px", background:C.accentSoft, borderBottom:`1px solid ${C.border}` }}><EditRow tx={tx} isChild={isChild} parentId={parentId} /></div>}
+        {isEditing && (
+          <div style={{ padding:"0 16px 12px", background:C.accentSoft, borderBottom:`1px solid ${C.border}` }}>
+            <TxEditForm tx={tx} isChild={isChild} parentId={parentId}
+              onSave={saveEdit} onDelete={requestDelete} onCancel={()=>setEditingId(null)} />
+          </div>
+        )}
       </>
     );
   };
@@ -1029,12 +1082,40 @@ function TransactionsScreen() {
                           {tx.children.map(child=>(
                             <div key={child.id}>
                               <TxRow tx={child} isChild parentId={tx.id} />
-                              {editingId===child.id && <div style={{ padding:"0 16px 12px", background:C.accentSoft }}><EditRow tx={child} isChild parentId={tx.id} /></div>}
                             </div>
                           ))}
+                          {/* 묶음 항목 추가 */}
+                          {addingChildId===tx.id ? (
+                            <div style={{ padding:"12px 16px", borderTop:`1px solid ${C.border}`, background:C.accentSoft }}>
+                              <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                                <input value={addChildForm.memo} onChange={e=>setAddChildForm(f=>({...f,memo:e.target.value}))}
+                                  placeholder="사용처"
+                                  style={{ flex:2, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:13, boxSizing:"border-box" }}/>
+                                <input type="number" value={addChildForm.amount} onChange={e=>setAddChildForm(f=>({...f,amount:e.target.value}))}
+                                  placeholder="금액"
+                                  style={{ flex:1, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.expense, fontSize:13, fontWeight:600, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }}/>
+                              </div>
+                              <select value={addChildForm.category} onChange={e=>setAddChildForm(f=>({...f,category:e.target.value}))}
+                                style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:13, boxSizing:"border-box", marginBottom:8 }}>
+                                <option value="">카테고리 선택</option>
+                                {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+                              </select>
+                              <div style={{ display:"flex", gap:8 }}>
+                                <button onClick={()=>{ setAddingChildId(null); setAddChildForm({memo:"",amount:"",category:""}); }}
+                                  style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
+                                <button onClick={()=>saveChildAdd(tx.id, tx.date)}
+                                  disabled={!addChildForm.memo.trim()||!addChildForm.amount}
+                                  style={{ flex:2, padding:"8px", borderRadius:8, border:"none", background:(addChildForm.memo.trim()&&addChildForm.amount)?C.accent:C.border, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>추가</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={()=>{ setAddingChildId(tx.id); setAddChildForm({memo:"",amount:"",category:tx.category||""}); }}
+                              style={{ width:"100%", padding:"10px", border:"none", borderTop:`1px solid ${C.border}`, background:"transparent", color:C.accent, fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                              ＋ 항목 추가
+                            </button>
+                          )}
                         </div>
                       )}
-                      {editingId===tx.id && !tx.is_group && <div style={{ padding:"0 16px 12px", background:C.accentSoft }}><EditRow tx={tx} /></div>}
                     </div>
                   ))}
                 </div>
