@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.36";
+const APP_VERSION = "1.10.37";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3179,12 +3179,16 @@ function FamilyInfoCard() {
   const [confirm, setConfirm] = useState(null); // null | "leave"
   const [working, setWorking] = useState(false);
   const [leaveCode, setLeaveCode] = useState("");
+  const [members, setMembers] = useState([]);
 
   useEffect(() => {
     if (!profile?.family_id || !token) { setLoading(false); return; }
     sb.select("families", `id=eq.${profile.family_id}`, token)
       .then(data => { if (data?.length) setFamily(data[0]); setLoading(false); })
       .catch(() => setLoading(false));
+    sb.select("profiles", `family_id=eq.${profile.family_id}`, token)
+      .then(data => { if (data?.length) setMembers(data); })
+      .catch(() => {});
   }, [profile?.family_id, token]);
 
   const copyCode = () => {
@@ -3350,6 +3354,31 @@ function FamilyInfoCard() {
             </>
           )}
         </div>
+
+        {/* 가족 멤버 */}
+        {members.length > 0 && (
+          <div style={{ background:C.surfaceHigh, borderRadius:12, padding:"12px 14px", marginBottom:12 }}>
+            <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 10px", fontWeight:600 }}>👨‍👩‍👧 가족 멤버 ({members.length}명)</p>
+            {members.map((m, i) => (
+              <div key={m.id} style={{ display:"flex", alignItems:"center", gap:10,
+                padding:"8px 0", borderBottom: i < members.length-1 ? `1px solid ${C.border}` : "none" }}>
+                <div style={{ width:32, height:32, borderRadius:10, background:C.accentSoft,
+                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, flexShrink:0 }}>
+                  {m.id === profile.id ? "🙋" : "👤"}
+                </div>
+                <div style={{ flex:1 }}>
+                  <p style={{ color:C.text, fontSize:13, fontWeight:600, margin:0 }}>
+                    {m.name || "이름 없음"}
+                    {m.id === profile.id && <span style={{ color:C.accent, fontSize:11, marginLeft:6 }}>나</span>}
+                  </p>
+                  <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>
+                    {m.role === "owner" ? "가족장" : "멤버"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* 가족 관리 버튼 */}
         <div style={{ display:"flex", gap:8 }}>
