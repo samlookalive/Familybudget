@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.34";
+const APP_VERSION = "1.10.35";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -705,16 +705,16 @@ function TxEditForm({ tx, isChild=false, parentId=null, onSave, onDelete, onCanc
   });
   return (
     <div style={{ background:C.accentSoft, borderRadius:12, padding:"12px", border:`1px solid ${C.accent}44` }}>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8, overflow:"hidden" }}>
         <div>
           <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>금액</p>
           <input type="text" value={fmt(Number(form.amount))} onChange={e=>setForm(f=>({...f,amount:e.target.value.replace(/,/g,"")}))}
-            style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }} />
+            style={{ width:"100%", height:38, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"0 10px", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }} />
         </div>
         <div>
           <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>날짜</p>
           <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}
-            style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
+            style={{ width:"100%", height:38, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"0 8px", color:C.text, fontSize:13, boxSizing:"border-box", overflow:"hidden" }} />
         </div>
       </div>
       <div style={{ marginBottom:10 }}>
@@ -887,9 +887,11 @@ function TransactionsScreen() {
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               <p style={{ color:C.text, fontSize:isChild?13:14, fontWeight:500, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, minWidth:0 }}>{tx.memo}</p>
-              {tx.is_group && <span style={{ flexShrink:0 }}><Tag color={C.accent}>{tx.child_count}건</Tag></span>}
             </div>
-            <p style={{ color:C.textMuted, fontSize:11, margin:"2px 0 0" }}>{fmtDate(tx.date)} · {cat.name||tx.category}</p>
+            <div style={{ display:"flex", alignItems:"center", gap:5, marginTop:2 }}>
+              <span style={{ color:C.textMuted, fontSize:11 }}>{fmtDate(tx.date)} · {cat.name||tx.category}</span>
+              {tx.is_group && <Tag color={C.accent}>{tx.child_count}건</Tag>}
+            </div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
             <AmountText amount={tx.amount} type={tx.type||"expense"} size={isChild?13:15} />
