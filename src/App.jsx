@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.35";
+const APP_VERSION = "1.10.36";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1193,7 +1193,7 @@ function InputScreen() {
   const [manualName,     setManualName]     = useState("");
   const [manualCat,      setManualCat]      = useState("여행");
   const [manualDate,     setManualDate]     = useState(today());
-  const [manualChildren, setManualChildren] = useState([{id:"mc1",memo:"",amount:"",category:"식비"}]);
+  const [manualChildren, setManualChildren] = useState([{id:"mc1",memo:"",amount:"",category:"여행"}]);
 
   // ── 단건 직접 입력 ───────────────────────────────────────────
   const [singleManual,     setSingleManual]     = useState(false);
@@ -1973,10 +1973,10 @@ function InputScreen() {
                     <input value={manualName} onChange={e=>setManualName(e.target.value)} placeholder="예) 여름휴가여행"
                       style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14,boxSizing:"border-box"}}/>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14,overflow:"hidden"}}>
                     <div>
                       <p style={{color:C.textMuted,fontSize:11,margin:"0 0 5px"}}>카테고리</p>
-                      <select value={manualCat} onChange={e=>setManualCat(e.target.value)}
+                      <select value={manualCat} onChange={e=>{ setManualCat(e.target.value); setManualChildren(p=>p.map(c=>({...c,category:e.target.value}))); }}
                         style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:13,boxSizing:"border-box"}}>
                         {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
                       </select>
@@ -1984,7 +1984,7 @@ function InputScreen() {
                     <div>
                       <p style={{color:C.textMuted,fontSize:11,margin:"0 0 5px"}}>날짜</p>
                       <input type="date" value={manualDate} onChange={e=>setManualDate(e.target.value)}
-                        style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px",color:C.text,fontSize:13,boxSizing:"border-box"}}/>
+                        style={{width:"100%",height:42,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"0 8px",color:C.text,fontSize:13,boxSizing:"border-box",overflow:"hidden"}}/>
                     </div>
                   </div>
                   <p style={{color:C.textMuted,fontSize:11,margin:"0 0 8px",fontWeight:600}}>세부 항목</p>
@@ -2033,10 +2033,10 @@ function InputScreen() {
                   ))}
                   {manualChildren.some(c=>c.amount)&&(
                     <div style={{display:"flex",justifyContent:"flex-end",marginBottom:6}}>
-                      <span style={{color:C.expense,fontSize:14,fontWeight:700,fontFamily:"'DM Mono',monospace"}}>-{fmt(manualChildren.reduce((s,c)=>s+(Number(c.amount)||0),0))}원</span>
+                      <span style={{color:C.expense,fontSize:14,fontWeight:700,fontFamily:"'DM Mono',monospace"}}>{fmt(manualChildren.reduce((s,c)=>s+(Number(c.amount)||0),0))}원</span>
                     </div>
                   )}
-                  <button onClick={()=>setManualChildren(p=>[...p,{id:"mc"+Date.now(),memo:"",amount:"",category:"식비"}])}
+                  <button onClick={()=>setManualChildren(p=>[...p,{id:"mc"+Date.now(),memo:"",amount:"",category:manualCat}])}
                     style={{width:"100%",padding:"10px",borderRadius:10,border:`1px dashed ${C.border}`,background:"transparent",color:C.textMuted,fontSize:13,cursor:"pointer",marginBottom:16}}>
                     + 항목 추가
                   </button>
