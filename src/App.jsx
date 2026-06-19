@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.33";
+const APP_VERSION = "1.10.34";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -886,8 +886,8 @@ function TransactionsScreen() {
           </div>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              <p style={{ color:C.text, fontSize:isChild?13:14, fontWeight:500, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{tx.memo}</p>
-              {tx.is_group && <Tag color={C.accent}>{tx.child_count}건</Tag>}
+              <p style={{ color:C.text, fontSize:isChild?13:14, fontWeight:500, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, minWidth:0 }}>{tx.memo}</p>
+              {tx.is_group && <span style={{ flexShrink:0 }}><Tag color={C.accent}>{tx.child_count}건</Tag></span>}
             </div>
             <p style={{ color:C.textMuted, fontSize:11, margin:"2px 0 0" }}>{fmtDate(tx.date)} · {cat.name||tx.category}</p>
           </div>
@@ -1087,13 +1087,13 @@ function TransactionsScreen() {
                           {/* 묶음 항목 추가 */}
                           {addingChildId===tx.id ? (
                             <div style={{ padding:"12px 16px", borderTop:`1px solid ${C.border}`, background:C.accentSoft }}>
-                              <div style={{ display:"flex", gap:8, marginBottom:8 }}>
+                              <div style={{ display:"flex", gap:8, marginBottom:8, width:"100%" }}>
                                 <input value={addChildForm.memo} onChange={e=>setAddChildForm(f=>({...f,memo:e.target.value}))}
                                   placeholder="사용처"
-                                  style={{ flex:2, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:13, boxSizing:"border-box" }}/>
+                                  style={{ flex:2, minWidth:0, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:13, boxSizing:"border-box" }}/>
                                 <input type="number" value={addChildForm.amount} onChange={e=>setAddChildForm(f=>({...f,amount:e.target.value}))}
                                   placeholder="금액"
-                                  style={{ flex:1, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.expense, fontSize:13, fontWeight:600, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }}/>
+                                  style={{ flex:1, minWidth:0, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.expense, fontSize:13, fontWeight:600, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }}/>
                               </div>
                               <select value={addChildForm.category} onChange={e=>setAddChildForm(f=>({...f,category:e.target.value}))}
                                 style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:13, boxSizing:"border-box", marginBottom:8 }}>
