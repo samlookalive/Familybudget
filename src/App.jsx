@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.38";
+const APP_VERSION = "1.10.39";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2402,7 +2402,7 @@ function AIRulesTab() {
 }
 
 // ── 정기지출 항목 (설정 화면용) ─────────────────────────────
-function RecRow({ item, expandedId, recEditForm, setRecEditForm, monthLabel, ICONS_REC, startRecEdit, saveRecEdit, toggleActive, setExpandedId, allCategories }) {
+function RecRow({ item, expandedId, recEditForm, setRecEditForm, monthLabel, ICONS_REC, startRecEdit, saveRecEdit, toggleActive, deleteRec, setExpandedId, allCategories }) {
   const isExp = expandedId===item.id;
   const STATUS_MAP = { registered:{label:"등록완료",color:C.income}, pending_date:{label:"자동예정",color:C.accent}, need_input:{label:"금액확인필요",color:C.expense}, inactive:{label:"비활성",color:C.textMuted} };
   const statusInfo = STATUS_MAP[item.status] || STATUS_MAP.inactive;
@@ -2469,6 +2469,7 @@ function RecRow({ item, expandedId, recEditForm, setRecEditForm, monthLabel, ICO
           </div>
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={e=>{e.stopPropagation();toggleActive(item.id);setExpandedId(null);}} style={{ padding:"9px 14px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>{item.is_active?"비활성화":"활성화"}</button>
+            <button onClick={e=>{e.stopPropagation(); if(window.confirm(`"${item.name}" 항목을 삭제할까요?`)) deleteRec(item.id);}} style={{ padding:"9px 12px", borderRadius:9, border:`1px solid ${C.expense}44`, background:"transparent", color:C.expense, fontSize:12, cursor:"pointer" }}>삭제</button>
             <button onClick={e=>{e.stopPropagation();setExpandedId(null);}} style={{ flex:1, padding:"9px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>취소</button>
             <button onClick={e=>{e.stopPropagation();saveRecEdit(item.id);}} style={{ flex:2, padding:"9px", borderRadius:9, border:"none", background:C.accent, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>저장</button>
           </div>
@@ -2746,7 +2747,17 @@ function SettingsScreen() {
     setRecurring(prev=>[...prev, { id:newId, ...base }]);
     setShowAdd(false); setNewRec({ name:"", amount:"", amount_type:"fixed", day_of_month:"1", icon:"📱", category:"" });
   };
-  const recRowProps = { expandedId, recEditForm, setRecEditForm, monthLabel, ICONS_REC, startRecEdit, saveRecEdit, toggleActive, setExpandedId, allCategories };
+
+  const deleteRec = (id) => {
+    setRecurring(prev => prev.filter(i => i.id !== id));
+    setExpandedId(null);
+    const tok = localStorage.getItem("sb_token");
+    if (tok) {
+      sb.delete("recurring_transactions", { id }, tok).catch(e => console.log("정기지출 삭제 DB 실패:", e.message));
+    }
+  };
+
+  const recRowProps = { expandedId, recEditForm, setRecEditForm, monthLabel, ICONS_REC, startRecEdit, saveRecEdit, toggleActive, deleteRec, setExpandedId, allCategories };
 
   return (
     <div style={{ paddingBottom:110 }}>
