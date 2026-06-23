@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.39";
+const APP_VERSION = "1.10.40";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3987,7 +3987,7 @@ export default function App() {
 
     let startY = 0;
     let pulling = false;
-    const THRESHOLD = 75;
+    const THRESHOLD = 140;
     let indicatorEl = null;
 
     const showIndicator = (text, color) => {
@@ -4026,7 +4026,7 @@ export default function App() {
     const onTouchMove = (e) => {
       if (!startY) return;
       const diff = e.touches[0].clientY - startY;
-      if (diff > 15) {
+      if (diff > 30) {
         pulling = true;
         if (diff >= THRESHOLD) {
           showIndicator("↑ 놓으면 새로고침", C.income);
