@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.40";
+const APP_VERSION = "1.10.42";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3988,39 +3988,27 @@ export default function App() {
     let startY = 0;
     let pulling = false;
     const THRESHOLD = 140;
-    let indicatorEl = null;
-
-    const showIndicator = (text, color) => {
-      if (!indicatorEl) {
-        indicatorEl = document.createElement("div");
-        indicatorEl.style.cssText = `
-          position:fixed;top:0;left:0;right:0;display:flex;align-items:center;
-          justify-content:center;gap:6px;padding:10px 0 8px;
-          font-size:13px;font-weight:600;z-index:99999;
-          font-family:'Pretendard','Apple SD Gothic Neo',sans-serif;
-          transition:background 0.2s;`;
-        document.body.appendChild(indicatorEl);
-      }
-      indicatorEl.style.background = color;
-      indicatorEl.style.color = "#fff";
-      indicatorEl.textContent = text;
-    };
-
-    const hideIndicator = () => {
-      if (indicatorEl) { document.body.removeChild(indicatorEl); indicatorEl = null; }
-    };
 
     // 터치 시작 — 스크롤 맨 위일 때만 감지
-    const onTouchStart = (e) => {
-      let el = e.target;
+    const getScrollTop = (target) => {
+      let el = target;
       while (el && el !== document.body) {
         const style = window.getComputedStyle(el);
-        if ((style.overflowY === "auto" || style.overflowY === "scroll") && el.scrollTop > 0) {
-          startY = 0; return; // 스크롤 중간이면 무시
+        if (style.overflowY === "auto" || style.overflowY === "scroll") {
+          return el.scrollTop;
         }
         el = el.parentElement;
       }
-      startY = e.touches[0].clientY;
+      return window.scrollY || 0;
+    };
+
+    const onTouchStart = (e) => {
+      pulling = false;
+      startY = 0;
+      const scrollTop = getScrollTop(e.target);
+      if (scrollTop <= 0) {
+        startY = e.touches[0].clientY;
+      }
     };
 
     const onTouchMove = (e) => {
@@ -4028,11 +4016,6 @@ export default function App() {
       const diff = e.touches[0].clientY - startY;
       if (diff > 30) {
         pulling = true;
-        if (diff >= THRESHOLD) {
-          showIndicator("↑ 놓으면 새로고침", C.income);
-        } else {
-          showIndicator("↓ 당겨서 새로고침", C.accent);
-        }
       }
     };
 
@@ -4040,12 +4023,10 @@ export default function App() {
       if (pulling && startY) {
         const diff = (e.changedTouches[0]?.clientY || startY) - startY;
         if (diff >= THRESHOLD) {
-          showIndicator("새로고침 중...", C.accent);
-          setTimeout(() => window.location.reload(), 300);
+          setTimeout(() => window.location.reload(), 100);
           return;
         }
       }
-      hideIndicator();
       pulling = false;
       startY = 0;
     };
@@ -4058,7 +4039,6 @@ export default function App() {
       document.removeEventListener("touchstart", onTouchStart);
       document.removeEventListener("touchmove",  onTouchMove);
       document.removeEventListener("touchend",   onTouchEnd);
-      hideIndicator();
     };
   }, []);
 
