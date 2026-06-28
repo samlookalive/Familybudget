@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.42";
+const APP_VERSION = "1.10.43";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3719,10 +3719,21 @@ export default function App() {
   const _loadAll = async (fid, tok) => {
     try {
       const nowDate = new Date();
-      const ym = nowDate.toISOString().slice(0,7); // YYYY-MM (함수 전체에서 공유)
+      const ym = nowDate.toISOString().slice(0,7);
 
-      const txData = await sb.select("transactions",
-        `family_id=eq.${fid}&parent_id=is.null&order=date.desc,created_at.desc`, tok);
+      // ── Phase 1: 독립적인 4개 호출 동시 실행 ──────────────────
+      const [txData, recData, bData, catData] = await Promise.all([
+        sb.select("transactions",
+          `family_id=eq.${fid}&parent_id=is.null&order=date.desc,created_at.desc`, tok),
+        sb.select("recurring_transactions",
+          `family_id=eq.${fid}&order=day_of_month.asc`, tok),
+        sb.select("budgets",
+          `family_id=eq.${fid}&year_month=eq.${ym}`, tok),
+        sb.select("categories",
+          `family_id=eq.${fid}&order=sort_order.asc`, tok),
+      ]);
+
+      // ── Phase 2: txData 의존 처리 ──────────────────────────────
       const groups = (txData||[]).filter(t=>t.is_group);
       let cm = {};
       if (groups.length > 0) {
@@ -3733,25 +3744,36 @@ export default function App() {
       const txFmt = (txData||[]).map(t=>t.is_group?{...t,children:cm[t.id]||[],child_count:(cm[t.id]||[]).length}:t);
       if (txFmt.length>0) setTransactionsLocal(txFmt);
 
-      const recData = await sb.select("recurring_transactions",`family_id=eq.${fid}&order=day_of_month.asc`,tok);
+      // budgets 처리
+      if (bData?.length) {
+        const b=bData[0];
+        setBudgetsLocal({totalEnabled:b.total_enabled,total:b.total||0,categories:b.categories||{}});
+      }
+
+      // categories 처리
+      if (catData?.length) {
+        const formatted = catData
+          .filter(c => !c.is_parent)
+          .map(c => ({ id:c.id, name:c.name, icon:c.icon, color:c.color, type:c.type, parentId:c.parent_id }));
+        setAllCategories(formatted);
+      }
+
+      // ── Phase 3: recData 의존 처리 (자동생성) ─────────────────
       if (recData?.length) {
         setRecurringLocal(recData);
 
-        // 정기지출 자동생성
         const year = nowDate.getFullYear();
         const month = nowDate.getMonth()+1;
 
         for (const rec of recData) {
           if (!rec.is_active) continue;
-          if (rec.last_generated_month === ym) continue; // 이미 이번달 처리됨
+          if (rec.last_generated_month === ym) continue;
 
           if (rec.amount_type === "fixed" && rec.amount) {
-            // 날짜 보정 (예: 31일인데 2월이면 28일로)
             const maxDay = new Date(year, month, 0).getDate();
             const day = Math.min(rec.day_of_month, maxDay);
             const dateStr = `${ym}-${String(day).padStart(2,"0")}`;
 
-            // 이번달에 이미 같은 정기지출로 만들어진 거래가 있는지 확인
             const alreadyExists = (txData||[]).some(t=>
               t.memo === `${rec.icon||""} ${rec.name} (정기)`.trim() &&
               t.date?.startsWith(ym)
@@ -3761,7 +3783,6 @@ export default function App() {
               continue;
             }
 
-            // 거래 자동 생성
             try {
               await sb.insert("transactions", {
                 family_id: fid, user_id: rec.user_id || null,
@@ -3774,7 +3795,6 @@ export default function App() {
             } catch(e) { console.log("정기지출 자동생성 실패:", rec.name, e.message); }
 
           } else if (rec.amount_type === "variable") {
-            // 변동 항목 → need_input으로 리셋 (자동생성 없음)
             await sb.update("recurring_transactions", { status: "need_input" }, { id: rec.id }, tok).catch(()=>{});
             setRecurringLocal(prev => prev.map(r => r.id===rec.id ? {...r, status:"need_input"} : r));
           }
@@ -3786,25 +3806,10 @@ export default function App() {
         if (txDataFresh?.length) setTransactionsLocal(txDataFresh.map(t=>t.is_group?{...t,children:cm[t.id]||[],child_count:(cm[t.id]||[]).length}:t));
       }
 
-      // ym은 위에서 이미 선언됨
-      const bData = await sb.select("budgets",`family_id=eq.${fid}&year_month=eq.${ym}`,tok);
-      if (bData?.length) {
-        const b=bData[0];
-        setBudgetsLocal({totalEnabled:b.total_enabled,total:b.total||0,categories:b.categories||{}});
-      }
-
-      const catData = await sb.select("categories", `family_id=eq.${fid}&order=sort_order.asc`, tok);
-      if (catData?.length) {
-        const formatted = catData
-          .filter(c => !c.is_parent)
-          .map(c => ({ id:c.id, name:c.name, icon:c.icon, color:c.color, type:c.type, parentId:c.parent_id }));
-        setAllCategories(formatted);
-      }
-
-      // 상대방 새 항목 감지 → 토스트
+      // ── Phase 4: 토스트 감지 (txData 의존) ────────────────────
       const myUserId = localStorage.getItem("sb_user_id");
       const lastCheck = localStorage.getItem("last_check_time");
-      const checkFrom = lastCheck ? Number(lastCheck) : Date.now() - 60 * 60 * 1000; // 없으면 1시간 전부터
+      const checkFrom = lastCheck ? Number(lastCheck) : Date.now() - 60 * 60 * 1000;
       if (myUserId && txData?.length) {
         const newByOther = (txData||[]).filter(t =>
           t.user_id && t.user_id !== myUserId &&
