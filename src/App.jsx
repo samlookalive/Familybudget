@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.43";
+const APP_VERSION = "1.10.44";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -3743,20 +3743,19 @@ export default function App() {
       }
       const txFmt = (txData||[]).map(t=>t.is_group?{...t,children:cm[t.id]||[],child_count:(cm[t.id]||[]).length}:t);
       if (txFmt.length>0) setTransactionsLocal(txFmt);
+      let finalTxFmt = txFmt; // 캐시용 최종 상태 추적
 
       // budgets 처리
-      if (bData?.length) {
-        const b=bData[0];
-        setBudgetsLocal({totalEnabled:b.total_enabled,total:b.total||0,categories:b.categories||{}});
-      }
+      const budgetState = bData?.length ? {
+        totalEnabled: bData[0].total_enabled, total: bData[0].total||0, categories: bData[0].categories||{}
+      } : null;
+      if (budgetState) setBudgetsLocal(budgetState);
 
       // categories 처리
-      if (catData?.length) {
-        const formatted = catData
-          .filter(c => !c.is_parent)
-          .map(c => ({ id:c.id, name:c.name, icon:c.icon, color:c.color, type:c.type, parentId:c.parent_id }));
-        setAllCategories(formatted);
-      }
+      const catFormatted = catData ? catData
+        .filter(c => !c.is_parent)
+        .map(c => ({ id:c.id, name:c.name, icon:c.icon, color:c.color, type:c.type, parentId:c.parent_id })) : [];
+      if (catFormatted.length) setAllCategories(catFormatted);
 
       // ── Phase 3: recData 의존 처리 (자동생성) ─────────────────
       if (recData?.length) {
@@ -3803,7 +3802,10 @@ export default function App() {
         // 자동생성 후 거래내역 새로 로드
         const txDataFresh = await sb.select("transactions",
           `family_id=eq.${fid}&parent_id=is.null&order=date.desc,created_at.desc`, tok);
-        if (txDataFresh?.length) setTransactionsLocal(txDataFresh.map(t=>t.is_group?{...t,children:cm[t.id]||[],child_count:(cm[t.id]||[]).length}:t));
+        if (txDataFresh?.length) {
+          finalTxFmt = txDataFresh.map(t=>t.is_group?{...t,children:cm[t.id]||[],child_count:(cm[t.id]||[]).length}:t);
+          setTransactionsLocal(finalTxFmt);
+        }
       }
 
       // ── Phase 4: 토스트 감지 (txData 의존) ────────────────────
@@ -3829,6 +3831,19 @@ export default function App() {
       }
       localStorage.setItem("last_check_time", String(Date.now()));
 
+      // ── 캐시 저장 (다음 진입 시 즉시 표시용) ──────────────────
+      try {
+        localStorage.setItem("app_cache", JSON.stringify({
+          fid,
+          userId: myUserId,
+          cachedAt: Date.now(),
+          transactions: finalTxFmt,
+          recurring: recData || [],
+          budgets: budgetState,
+          allCategories: catFormatted,
+        }));
+      } catch(e) { /* 저장 실패 무시 (용량 초과 등) */ }
+
     } catch(e) { ; }
   };
 
@@ -3837,6 +3852,23 @@ export default function App() {
     (async () => {
       let tok = localStorage.getItem("sb_token");
       if (!tok) { setAuthLoading(false); setProfileLoading(false); return; }
+
+      // ① 캐시 즉시 복원 — 인증 확인 전에 미리 화면 채우기
+      let cachedFid = null;
+      let cachedUserId = null;
+      try {
+        const cachedStr = localStorage.getItem("app_cache");
+        if (cachedStr) {
+          const cache = JSON.parse(cachedStr);
+          cachedFid    = cache.fid;
+          cachedUserId = cache.userId;
+          if (cache.transactions?.length)  setTransactionsLocal(cache.transactions);
+          if (cache.recurring?.length)     setRecurringLocal(cache.recurring);
+          if (cache.budgets)               setBudgetsLocal(cache.budgets);
+          if (cache.allCategories?.length) setAllCategories(cache.allCategories);
+        }
+      } catch(e) {}
+
       setProfileLoading(true);
       try {
         // 토큰 유효성 확인
@@ -3855,25 +3887,40 @@ export default function App() {
             } else {
               localStorage.removeItem("sb_token");
               localStorage.removeItem("sb_refresh_token");
-              setAuthLoading(false); return;
+              localStorage.removeItem("app_cache");
+              setAuthLoading(false); setProfileLoading(false); return;
             }
           } else {
             localStorage.removeItem("sb_token");
-            setAuthLoading(false);
-            setProfileLoading(false);
-            return;
+            localStorage.removeItem("app_cache");
+            setAuthLoading(false); setProfileLoading(false); return;
           }
         }
         setToken(tok);
         setAuthUser(user);
         if (user?.id) localStorage.setItem("sb_user_id", user.id);
+
+        // ② 캐시가 동일 유저/가족 → 즉시 앱 표시 후 백그라운드 갱신
+        if (cachedFid && cachedUserId === user.id) {
+          setProfile({ id: user.id, family_id: cachedFid, role: "member", is_approved: true });
+          setAuthLoading(false);
+          setProfileLoading(false);
+          // 프로필 최신화 (백그라운드)
+          sb.select("profiles", `id=eq.${user.id}`, tok)
+            .then(pList => { if (pList?.length) setProfile(pList[0]); })
+            .catch(() => {});
+          // 데이터 최신화 (백그라운드, await 없음)
+          _loadAll(cachedFid, tok);
+          return;
+        }
+
+        // ③ 캐시 없음 → 기존 방식 (프로필 + _loadAll 대기)
         const pList = await sb.select("profiles", `id=eq.${user.id}`, tok);
         if (pList?.length) {
           setProfile(pList[0]);
           if (pList[0].family_id) {
             await _loadAll(pList[0].family_id, tok);
           }
-          // family_id 없으면 가족 설정 화면으로 (정상 흐름)
         } else {
           // 프로필 없으면 자동 생성
           try {
@@ -3890,7 +3937,7 @@ export default function App() {
           }
         }
       } catch(e) {
-        setProfile({ id: user?.id || "unknown", family_id: null });
+        setProfile({ id: null, family_id: null });
       }
       setAuthLoading(false);
       setProfileLoading(false);
