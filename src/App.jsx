@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.44";
+const APP_VERSION = "1.10.45";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1195,9 +1195,11 @@ function InputScreen() {
   const [manualDate,     setManualDate]     = useState(today());
   const [manualChildren, setManualChildren] = useState([{id:"mc1",memo:"",amount:"",category:"여행"}]);
 
-  // ── 단건 직접 입력 ───────────────────────────────────────────
-  const [singleManual,     setSingleManual]     = useState(false);
-  const [manualSingleForm, setManualSingleForm] = useState({ type:"expense", amount:"", memo:"", category:"식비", date:today() });
+  // ── 다중 항목 직접 입력 ───────────────────────────────────────
+  const [singleManual,   setSingleManual]   = useState(false);
+  const [multiType,       setMultiType]       = useState("expense");
+  const [multiDate,       setMultiDate]       = useState(today());
+  const [multiItems,      setMultiItems]      = useState([{ id:"mi1", memo:"", amount:"", category:"" }]);
 
   // ── STT ─────────────────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -1688,55 +1690,88 @@ function InputScreen() {
                     <p style={{color:C.text,fontSize:14,fontWeight:600,margin:0}}>직접 입력</p>
                     <button onClick={()=>setSingleManual(false)} style={{color:C.accent,fontSize:12,background:"transparent",border:"none",cursor:"pointer"}}>← AI 입력으로</button>
                   </div>
-                  <div style={{display:"flex",gap:8,marginBottom:12}}>
-                    {["expense","income"].map(t=>(
-                      <button key={t} onClick={()=>setManualSingleForm(f=>({...f,type:t,category:allCategories.find(c=>c.type===t)?.name||""}))}
-                        style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${manualSingleForm.type===t?(t==="income"?C.income:C.expense):C.border}`,background:manualSingleForm.type===t?(t==="income"?C.income+"22":C.expense+"22"):"transparent",color:manualSingleForm.type===t?(t==="income"?C.income:C.expense):C.textMuted,fontSize:13,fontWeight:600,cursor:"pointer"}}>
-                        {t==="expense"?"💸 지출":"💰 수입"}
-                      </button>
-                    ))}
-                  </div>
-                  <div style={{marginBottom:10}}>
-                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>금액</p>
-                    <div style={{display:"flex",alignItems:"center",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
-                      <input type="text" value={manualSingleForm.amount?fmt(Number(manualSingleForm.amount)):""} onChange={e=>setManualSingleForm(f=>({...f,amount:e.target.value.replace(/,/g,"")}))} placeholder="0"
-                        style={{flex:1,background:"transparent",border:"none",outline:"none",color:manualSingleForm.type==="income"?C.income:C.expense,fontSize:18,padding:"12px 14px",fontFamily:"'DM Mono',monospace",fontWeight:700}}/>
-                      <span style={{color:C.textMuted,fontSize:13,paddingRight:14}}>원</span>
-                    </div>
-                  </div>
-                  <div style={{marginBottom:10}}>
-                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>사용처</p>
-                    <input value={manualSingleForm.memo} onChange={e=>setManualSingleForm(f=>({...f,memo:e.target.value}))} placeholder="예) 스타벅스, 버스"
-                      style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontSize:14,boxSizing:"border-box"}}/>
-                  </div>
-                  <div style={{marginBottom:10}}>
-                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 6px"}}>카테고리</p>
-                    <select value={manualSingleForm.category} onChange={e=>setManualSingleForm(f=>({...f,category:e.target.value}))}
-                      style={{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14,boxSizing:"border-box"}}>
-                      <option value="">선택</option>
-                      {allCategories.filter(c=>c.type===manualSingleForm.type).map(c=>(
-                        <option key={c.id} value={c.name}>{c.icon} {c.name}</option>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                    <div style={{display:"flex",gap:6}}>
+                      {["expense","income"].map(t=>(
+                        <button key={t} onClick={()=>{
+                          setMultiType(t);
+                          const firstCat = allCategories.find(c=>c.type===t)?.name||"";
+                          setMultiItems(p=>p.map(it=>({...it,category:firstCat})));
+                        }}
+                          style={{flex:1,padding:"9px",borderRadius:10,border:`1px solid ${multiType===t?(t==="income"?C.income:C.expense):C.border}`,background:multiType===t?(t==="income"?C.income+"22":C.expense+"22"):"transparent",color:multiType===t?(t==="income"?C.income:C.expense):C.textMuted,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                          {t==="expense"?"💸 지출":"💰 수입"}
+                        </button>
                       ))}
-                    </select>
+                    </div>
+                    <input type="date" value={multiDate} onChange={e=>setMultiDate(e.target.value)}
+                      style={{width:"100%",height:38,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"0 10px",color:C.text,fontSize:13,boxSizing:"border-box",overflow:"hidden"}}/>
                   </div>
-                  <div style={{marginBottom:16}}>
-                    <p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>날짜</p>
-                    <input type="date" value={manualSingleForm.date} onChange={e=>setManualSingleForm(f=>({...f,date:e.target.value}))}
-                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14}}/>
-                  </div>
+
+                  <p style={{color:C.textMuted,fontSize:11,margin:"0 0 8px",fontWeight:600}}>항목</p>
+                  {multiItems.map((item,i)=>(
+                    <div key={item.id} style={{background:C.surface,borderRadius:12,padding:"12px",marginBottom:8,border:`1px solid ${C.border}`}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:6,marginBottom:6,alignItems:"center"}}>
+                        <input value={item.memo} onChange={e=>{
+                          const val=e.target.value;
+                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,memo:val}:x));
+                        }} placeholder={`항목 ${i+1} 사용처 (예: 스타벅스)`}
+                          style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:13,boxSizing:"border-box",width:"100%"}}/>
+                        {multiItems.length>1 && (
+                          <button onClick={()=>setMultiItems(p=>p.filter((_,j)=>j!==i))}
+                            style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:12,cursor:"pointer",flexShrink:0}}>✕</button>
+                        )}
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                        <input type="number" value={item.amount} onChange={e=>{
+                          const val=e.target.value;
+                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,amount:val}:x));
+                        }} placeholder="금액"
+                          style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:multiType==="income"?C.income:C.expense,fontSize:13,fontWeight:600,fontFamily:"'DM Mono',monospace",boxSizing:"border-box",width:"100%"}}/>
+                        <select value={item.category} onChange={e=>{
+                          const val=e.target.value;
+                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,category:val}:x));
+                        }}
+                          style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%"}}>
+                          <option value="">카테고리</option>
+                          {allCategories.filter(c=>c.type===multiType).map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+
+                  {multiItems.some(it=>it.amount) && (
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,padding:"0 4px"}}>
+                      <span style={{color:C.textMuted,fontSize:12}}>{multiItems.filter(it=>it.amount).length}건</span>
+                      <span style={{color:multiType==="income"?C.income:C.expense,fontSize:15,fontWeight:700,fontFamily:"'DM Mono',monospace"}}>
+                        {fmt(multiItems.reduce((s,it)=>s+(Number(it.amount)||0),0))}원
+                      </span>
+                    </div>
+                  )}
+
+                  <button onClick={()=>setMultiItems(p=>[...p,{id:"mi"+Date.now(),memo:"",amount:"",category:allCategories.find(c=>c.type===multiType)?.name||""}])}
+                    style={{width:"100%",padding:"10px",borderRadius:10,border:`1px dashed ${C.border}`,background:"transparent",color:C.textMuted,fontSize:13,cursor:"pointer",marginBottom:16}}>
+                    + 항목 추가
+                  </button>
+
                   <div style={{display:"flex",gap:10}}>
                     <button onClick={()=>setSingleManual(false)}
                       style={{flex:1,padding:"14px",borderRadius:12,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:15,cursor:"pointer"}}>취소</button>
                     <button onClick={()=>{
-                      if(!manualSingleForm.amount||!manualSingleForm.memo.trim()) return;
-                      addTransactions([{id:uid(),type:manualSingleForm.type,amount:Number(manualSingleForm.amount),memo:manualSingleForm.memo,category:manualSingleForm.category,date:manualSingleForm.date,is_group:false}]);
+                      const validItems = multiItems.filter(it=>it.amount && it.memo.trim());
+                      if(!validItems.length) return;
+                      addTransactions(validItems.map(it=>({
+                        id:uid(), type:multiType, amount:Number(it.amount),
+                        memo:it.memo.trim(), category:it.category||allCategories.find(c=>c.type===multiType)?.name||"기타",
+                        date:multiDate, is_group:false,
+                      })));
                       setSingleManual(false);
-                      setManualSingleForm({type:"expense",amount:"",memo:"",category:"식비",date:today()});
+                      setMultiType("expense"); setMultiDate(today());
+                      setMultiItems([{id:"mi1",memo:"",amount:"",category:""}]);
                       setStep("done");
                       setTimeout(()=>{resetAll();setActiveTab("transactions");},1200);
-                    }} disabled={!manualSingleForm.amount||!manualSingleForm.memo.trim()}
-                      style={{flex:2,padding:"14px",borderRadius:12,border:"none",background:(manualSingleForm.amount&&manualSingleForm.memo.trim())?C.accent:C.border,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>
-                      저장하기
+                    }} disabled={!multiItems.some(it=>it.amount && it.memo.trim())}
+                      style={{flex:2,padding:"14px",borderRadius:12,border:"none",background:multiItems.some(it=>it.amount && it.memo.trim())?C.accent:C.border,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>
+                      {multiItems.filter(it=>it.amount && it.memo.trim()).length || ""}건 저장하기
                     </button>
                   </div>
                 </div>
