@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.45";
+const APP_VERSION = "1.10.46";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1198,8 +1198,7 @@ function InputScreen() {
   // ── 다중 항목 직접 입력 ───────────────────────────────────────
   const [singleManual,   setSingleManual]   = useState(false);
   const [multiType,       setMultiType]       = useState("expense");
-  const [multiDate,       setMultiDate]       = useState(today());
-  const [multiItems,      setMultiItems]      = useState([{ id:"mi1", memo:"", amount:"", category:"" }]);
+  const [multiItems,      setMultiItems]      = useState([{ id:"mi1", memo:"", amount:"", category:"", date:today() }]);
 
   // ── STT ─────────────────────────────────────────────────────
   const [isRecording, setIsRecording] = useState(false);
@@ -1690,21 +1689,17 @@ function InputScreen() {
                     <p style={{color:C.text,fontSize:14,fontWeight:600,margin:0}}>직접 입력</p>
                     <button onClick={()=>setSingleManual(false)} style={{color:C.accent,fontSize:12,background:"transparent",border:"none",cursor:"pointer"}}>← AI 입력으로</button>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-                    <div style={{display:"flex",gap:6}}>
-                      {["expense","income"].map(t=>(
-                        <button key={t} onClick={()=>{
-                          setMultiType(t);
-                          const firstCat = allCategories.find(c=>c.type===t)?.name||"";
-                          setMultiItems(p=>p.map(it=>({...it,category:firstCat})));
-                        }}
-                          style={{flex:1,padding:"9px",borderRadius:10,border:`1px solid ${multiType===t?(t==="income"?C.income:C.expense):C.border}`,background:multiType===t?(t==="income"?C.income+"22":C.expense+"22"):"transparent",color:multiType===t?(t==="income"?C.income:C.expense):C.textMuted,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                          {t==="expense"?"💸 지출":"💰 수입"}
-                        </button>
-                      ))}
-                    </div>
-                    <input type="date" value={multiDate} onChange={e=>setMultiDate(e.target.value)}
-                      style={{width:"100%",height:38,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"0 10px",color:C.text,fontSize:13,boxSizing:"border-box",overflow:"hidden"}}/>
+                  <div style={{display:"flex",gap:6,marginBottom:14}}>
+                    {["expense","income"].map(t=>(
+                      <button key={t} onClick={()=>{
+                        setMultiType(t);
+                        const firstCat = allCategories.find(c=>c.type===t)?.name||"";
+                        setMultiItems(p=>p.map(it=>({...it,category:firstCat})));
+                      }}
+                        style={{flex:1,padding:"9px",borderRadius:10,border:`1px solid ${multiType===t?(t==="income"?C.income:C.expense):C.border}`,background:multiType===t?(t==="income"?C.income+"22":C.expense+"22"):"transparent",color:multiType===t?(t==="income"?C.income:C.expense):C.textMuted,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                        {t==="expense"?"💸 지출":"💰 수입"}
+                      </button>
+                    ))}
                   </div>
 
                   <p style={{color:C.textMuted,fontSize:11,margin:"0 0 8px",fontWeight:600}}>항목</p>
@@ -1721,21 +1716,26 @@ function InputScreen() {
                             style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:12,cursor:"pointer",flexShrink:0}}>✕</button>
                         )}
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
                         <input type="number" value={item.amount} onChange={e=>{
                           const val=e.target.value;
                           setMultiItems(p=>p.map((x,j)=>j===i?{...x,amount:val}:x));
                         }} placeholder="금액"
                           style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:multiType==="income"?C.income:C.expense,fontSize:13,fontWeight:600,fontFamily:"'DM Mono',monospace",boxSizing:"border-box",width:"100%"}}/>
-                        <select value={item.category} onChange={e=>{
+                        <input type="date" value={item.date} onChange={e=>{
                           const val=e.target.value;
-                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,category:val}:x));
+                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,date:val}:x));
                         }}
-                          style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%"}}>
-                          <option value="">카테고리</option>
-                          {allCategories.filter(c=>c.type===multiType).map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
-                        </select>
+                          style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"0 8px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%",height:36,overflow:"hidden"}}/>
                       </div>
+                      <select value={item.category} onChange={e=>{
+                        const val=e.target.value;
+                        setMultiItems(p=>p.map((x,j)=>j===i?{...x,category:val}:x));
+                      }}
+                        style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%"}}>
+                        <option value="">카테고리</option>
+                        {allCategories.filter(c=>c.type===multiType).map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+                      </select>
                     </div>
                   ))}
 
@@ -1748,7 +1748,7 @@ function InputScreen() {
                     </div>
                   )}
 
-                  <button onClick={()=>setMultiItems(p=>[...p,{id:"mi"+Date.now(),memo:"",amount:"",category:allCategories.find(c=>c.type===multiType)?.name||""}])}
+                  <button onClick={()=>setMultiItems(p=>[...p,{id:"mi"+Date.now(),memo:"",amount:"",category:allCategories.find(c=>c.type===multiType)?.name||"",date:today()}])}
                     style={{width:"100%",padding:"10px",borderRadius:10,border:`1px dashed ${C.border}`,background:"transparent",color:C.textMuted,fontSize:13,cursor:"pointer",marginBottom:16}}>
                     + 항목 추가
                   </button>
@@ -1762,11 +1762,11 @@ function InputScreen() {
                       addTransactions(validItems.map(it=>({
                         id:uid(), type:multiType, amount:Number(it.amount),
                         memo:it.memo.trim(), category:it.category||allCategories.find(c=>c.type===multiType)?.name||"기타",
-                        date:multiDate, is_group:false,
+                        date:it.date||today(), is_group:false,
                       })));
                       setSingleManual(false);
-                      setMultiType("expense"); setMultiDate(today());
-                      setMultiItems([{id:"mi1",memo:"",amount:"",category:""}]);
+                      setMultiType("expense");
+                      setMultiItems([{id:"mi1",memo:"",amount:"",category:"",date:today()}]);
                       setStep("done");
                       setTimeout(()=>{resetAll();setActiveTab("transactions");},1200);
                     }} disabled={!multiItems.some(it=>it.amount && it.memo.trim())}
