@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.46";
+const APP_VERSION = "1.10.47";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -1705,37 +1705,37 @@ function InputScreen() {
                   <p style={{color:C.textMuted,fontSize:11,margin:"0 0 8px",fontWeight:600}}>항목</p>
                   {multiItems.map((item,i)=>(
                     <div key={item.id} style={{background:C.surface,borderRadius:12,padding:"12px",marginBottom:8,border:`1px solid ${C.border}`}}>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:6,marginBottom:6,alignItems:"center"}}>
-                        <input value={item.memo} onChange={e=>{
-                          const val=e.target.value;
-                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,memo:val}:x));
-                        }} placeholder={`항목 ${i+1} 사용처 (예: 스타벅스)`}
-                          style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:13,boxSizing:"border-box",width:"100%"}}/>
-                        {multiItems.length>1 && (
-                          <button onClick={()=>setMultiItems(p=>p.filter((_,j)=>j!==i))}
-                            style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:12,cursor:"pointer",flexShrink:0}}>✕</button>
-                        )}
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
-                        <input type="number" value={item.amount} onChange={e=>{
-                          const val=e.target.value;
-                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,amount:val}:x));
-                        }} placeholder="금액"
-                          style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:multiType==="income"?C.income:C.expense,fontSize:13,fontWeight:600,fontFamily:"'DM Mono',monospace",boxSizing:"border-box",width:"100%"}}/>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginBottom:6,alignItems:"center"}}>
                         <input type="date" value={item.date} onChange={e=>{
                           const val=e.target.value;
                           setMultiItems(p=>p.map((x,j)=>j===i?{...x,date:val}:x));
                         }}
-                          style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"0 8px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%",height:36,overflow:"hidden"}}/>
+                          style={{minWidth:0,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"0 8px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%",height:36,overflow:"hidden"}}/>
+                        <select value={item.category} onChange={e=>{
+                          const val=e.target.value;
+                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,category:val}:x));
+                        }}
+                          style={{minWidth:0,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"0 8px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%",height:36,overflow:"hidden"}}>
+                          <option value="">카테고리</option>
+                          {allCategories.filter(c=>c.type===multiType).map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+                        </select>
+                        {multiItems.length>1 && (
+                          <button onClick={()=>setMultiItems(p=>p.filter((_,j)=>j!==i))}
+                            style={{padding:"0 10px",height:36,borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,fontSize:12,cursor:"pointer",flexShrink:0}}>✕</button>
+                        )}
                       </div>
-                      <select value={item.category} onChange={e=>{
-                        const val=e.target.value;
-                        setMultiItems(p=>p.map((x,j)=>j===i?{...x,category:val}:x));
-                      }}
-                        style={{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:12,boxSizing:"border-box",width:"100%"}}>
-                        <option value="">카테고리</option>
-                        {allCategories.filter(c=>c.type===multiType).map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
-                      </select>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                        <input value={item.memo} onChange={e=>{
+                          const val=e.target.value;
+                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,memo:val}:x));
+                        }} placeholder={`항목 ${i+1} 사용처`}
+                          style={{minWidth:0,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:13,boxSizing:"border-box",width:"100%"}}/>
+                        <input type="number" value={item.amount} onChange={e=>{
+                          const val=e.target.value;
+                          setMultiItems(p=>p.map((x,j)=>j===i?{...x,amount:val}:x));
+                        }} placeholder="금액"
+                          style={{minWidth:0,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 10px",color:multiType==="income"?C.income:C.expense,fontSize:13,fontWeight:600,fontFamily:"'DM Mono',monospace",boxSizing:"border-box",width:"100%"}}/>
+                      </div>
                     </div>
                   ))}
 
