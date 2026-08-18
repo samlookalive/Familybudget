@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.47";
+const APP_VERSION = "1.10.52";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -241,11 +241,14 @@ function calcCategoryStats(transactions, allCategories) {
     .sort((a,b)=>b.amount-a.amount);
 }
 
-function calcFixedVariable(transactions, recurring) {
-  const fixedCats  = ["월세","보험","구독","월세/관리비","구독서비스"];
+function calcFixedVariable(transactions, allCategories) {
   const flat = transactions.flatMap(t => t.is_group ? t.children : [t]);
   const expenseItems = flat.filter(t=>t.type==="expense");
-  const fixed    = expenseItems.filter(t=>fixedCats.some(fc=>t.category.includes(fc)||fc.includes(t.category))).reduce((s,t)=>s+t.amount,0);
+  const isFixed = (t) => {
+    const cat = allCategories?.find(c=>c.name===t.category);
+    return cat?.parentName === "고정비";
+  };
+  const fixed    = expenseItems.filter(isFixed).reduce((s,t)=>s+t.amount,0);
   const variable = expenseItems.reduce((s,t)=>s+t.amount,0) - fixed;
   return { fixed: Math.max(fixed,0), variable: Math.max(variable,0) };
 }
@@ -316,7 +319,7 @@ function HomeScreen() {
   const monthTx  = filterCurrentMonth(transactions);
   const summary  = calcSummary(monthTx);
   const catStats = calcCategoryStats(monthTx, allCategories);
-  const { fixed, variable } = calcFixedVariable(monthTx, recurring);
+  const { fixed, variable } = calcFixedVariable(monthTx, allCategories);
   const dailyExpense = calcDailyExpense(transactions);
   // 최근 3개월(이번달 제외) 평균 수입 계산
   const calcAvgIncome = () => {
@@ -349,10 +352,13 @@ function HomeScreen() {
   // 카테고리 드릴다운
   const [catDrillDown, setCatDrillDown] = useState(null); // null | "식비" | "교통" 등
 
-  const FIXED_CATS  = ["월세","보험","구독","월세/관리비","구독서비스","통신비","교육"];
   const flat = monthTx.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense");
-  const fixedItems    = flat.filter(t=>FIXED_CATS.some(fc=>t.category===fc||t.category.includes(fc)||fc.includes(t.category)));
-  const variableItems = flat.filter(t=>!FIXED_CATS.some(fc=>t.category===fc||t.category.includes(fc)||fc.includes(t.category)));
+  const isFixedCat = (t) => {
+    const cat = allCategories?.find(c=>c.name===t.category);
+    return cat?.parentName === "고정비";
+  };
+  const fixedItems    = flat.filter(isFixedCat);
+  const variableItems = flat.filter(t=>!isFixedCat(t));
 
   const drillItems  = drillDown==="fixed" ? fixedItems : variableItems;
   const drillLabel  = drillDown==="fixed" ? "고정비" : "변동비";
@@ -607,8 +613,8 @@ function HomeScreen() {
       {/* 고정비 / 변동비 — 클릭하면 드릴다운 */}
       <div style={{ margin:"0 16px 16px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
         {[
-          { label:"고정비", amount:fixed,    color:C.fixed,    icon:"📌", key:"fixed",    count:fixedItems.length },
           { label:"변동비", amount:variable, color:C.variable, icon:"🔄", key:"variable", count:variableItems.length },
+          { label:"고정비", amount:fixed,    color:C.fixed,    icon:"📌", key:"fixed",    count:fixedItems.length },
         ].map(item=>(
           <div key={item.label} onClick={()=>setDrillDown(item.key)}
             style={{ background:C.surface, borderRadius:16, padding:"16px", border:`1px solid ${C.border}`,
@@ -705,16 +711,16 @@ function TxEditForm({ tx, isChild=false, parentId=null, onSave, onDelete, onCanc
   });
   return (
     <div style={{ background:C.accentSoft, borderRadius:12, padding:"12px", border:`1px solid ${C.accent}44` }}>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8, overflow:"hidden" }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr minmax(132px,1.1fr)", gap:8, marginBottom:8, overflow:"hidden" }}>
         <div>
           <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>금액</p>
           <input type="text" value={fmt(Number(form.amount))} onChange={e=>setForm(f=>({...f,amount:e.target.value.replace(/,/g,"")}))}
-            style={{ width:"100%", height:38, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"0 10px", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }} />
+            style={{ width:"100%", minWidth:0, height:38, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"0 10px", color:C.text, fontSize:14, fontFamily:"'DM Mono',monospace", boxSizing:"border-box" }} />
         </div>
         <div>
           <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>날짜</p>
           <input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}
-            style={{ width:"100%", height:38, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"0 8px", color:C.text, fontSize:13, boxSizing:"border-box", overflow:"hidden" }} />
+            style={{ width:"100%", minWidth:0, height:38, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"0 8px", color:C.text, fontSize:13, boxSizing:"border-box", overflow:"hidden" }} />
         </div>
       </div>
       <div style={{ marginBottom:10 }}>
@@ -738,7 +744,7 @@ function TxEditForm({ tx, isChild=false, parentId=null, onSave, onDelete, onCanc
 // 거래 내역 화면
 // ══════════════════════════════════════════════════════════════
 function TransactionsScreen() {
-  const { transactions, setTransactions, allCategories, highlightIds } = useApp();
+  const { transactions, setTransactions, addTransactions, allCategories, highlightIds } = useApp();
   const [expandedId,   setExpandedId]   = useState(null);
   const [editingId,    setEditingId]    = useState(null);
   const [typeFilter,   setTypeFilter]   = useState("전체");
@@ -750,6 +756,8 @@ function TransactionsScreen() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [addingChildId, setAddingChildId] = useState(null);
   const [addChildForm,  setAddChildForm]  = useState({ memo:"", amount:"", category:"" });
+  const [showQuickAdd,  setShowQuickAdd]  = useState(false);
+  const [quickAddForm,  setQuickAddForm]  = useState({ type:"expense", date:today(), memo:"", amount:"", category:"" });
 
   const now = new Date();
   const thisYear = now.getFullYear();
@@ -950,10 +958,16 @@ function TransactionsScreen() {
               {availableYears.map(y=><option key={y} value={y}>{y}년</option>)}
             </select>
           </div>
-          <button onClick={()=>setShowSearch(s=>!s)}
-            style={{ padding:"8px 14px", borderRadius:10, border:`1px solid ${showSearch||activeFilterCount>0?C.accent:C.border}`, background:showSearch||activeFilterCount>0?C.accentSoft:"transparent", color:showSearch||activeFilterCount>0?C.accent:C.textMuted, fontSize:12, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
-            🔍{activeFilterCount>0&&<span style={{ background:C.accent, color:"#fff", borderRadius:"50%", width:16, height:16, fontSize:10, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>{activeFilterCount}</span>}
-          </button>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setShowQuickAdd(s=>!s)}
+              style={{ padding:"8px 14px", borderRadius:10, border:`1px solid ${showQuickAdd?C.accent:C.border}`, background:showQuickAdd?C.accentSoft:"transparent", color:showQuickAdd?C.accent:C.textMuted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+              ＋
+            </button>
+            <button onClick={()=>setShowSearch(s=>!s)}
+              style={{ padding:"8px 14px", borderRadius:10, border:`1px solid ${showSearch||activeFilterCount>0?C.accent:C.border}`, background:showSearch||activeFilterCount>0?C.accentSoft:"transparent", color:showSearch||activeFilterCount>0?C.accent:C.textMuted, fontSize:12, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:5 }}>
+              🔍{activeFilterCount>0&&<span style={{ background:C.accent, color:"#fff", borderRadius:"50%", width:16, height:16, fontSize:10, display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700 }}>{activeFilterCount}</span>}
+            </button>
+          </div>
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div style={{ display:"flex", gap:6 }}>
@@ -1006,6 +1020,54 @@ function TransactionsScreen() {
           </div>
           <button onClick={()=>{ setSearchText(""); setMinAmount(""); setMaxAmount(""); setCatFilter(""); }}
             style={{ width:"100%", padding:"8px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>필터 초기화</button>
+        </div>
+      )}
+
+
+      {/* 빠른 추가 */}
+      {showQuickAdd && (
+        <div style={{ margin:"0 16px 14px", background:C.surface, borderRadius:14, padding:"16px", border:`1px solid ${C.accent}44` }}>
+          <p style={{ color:C.accent, fontSize:11, fontWeight:600, margin:"0 0 12px" }}>＋ 빠른 추가</p>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr minmax(132px,1.1fr)", gap:8, marginBottom:8 }}>
+            <div style={{ display:"flex", gap:6 }}>
+              {["expense","income"].map(t=>(
+                <button key={t} onClick={()=>{
+                  setQuickAddForm(f=>({...f, type:t, category: allCategories.find(c=>c.type===t)?.name||""}));
+                }}
+                  style={{ flex:1, minWidth:0, padding:"0 8px", height:38, borderRadius:8, border:`1px solid ${quickAddForm.type===t?(t==="income"?C.income:C.expense):C.border}`, background:quickAddForm.type===t?(t==="income"?C.income+"22":C.expense+"22"):"transparent", color:quickAddForm.type===t?(t==="income"?C.income:C.expense):C.textMuted, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                  {t==="expense"?"💸 지출":"💰 수입"}
+                </button>
+              ))}
+            </div>
+            <input type="date" value={quickAddForm.date} onChange={e=>setQuickAddForm(f=>({...f,date:e.target.value}))}
+              style={{ width:"100%", minWidth:0, height:38, background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:8, padding:"0 8px", color:C.text, fontSize:13, boxSizing:"border-box", overflow:"hidden" }} />
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+            <input value={quickAddForm.memo} onChange={e=>setQuickAddForm(f=>({...f,memo:e.target.value}))} placeholder="사용처"
+              style={{ minWidth:0, background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:13, boxSizing:"border-box", width:"100%" }} />
+            <input type="number" value={quickAddForm.amount} onChange={e=>setQuickAddForm(f=>({...f,amount:e.target.value}))} placeholder="금액"
+              style={{ minWidth:0, background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:quickAddForm.type==="income"?C.income:C.expense, fontSize:13, fontWeight:600, fontFamily:"'DM Mono',monospace", boxSizing:"border-box", width:"100%" }} />
+          </div>
+          <select value={quickAddForm.category} onChange={e=>setQuickAddForm(f=>({...f,category:e.target.value}))}
+            style={{ width:"100%", minWidth:0, background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:13, boxSizing:"border-box", marginBottom:12 }}>
+            <option value="">카테고리 선택</option>
+            {allCategories.filter(c=>c.type===quickAddForm.type).map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
+          </select>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setShowQuickAdd(false)}
+              style={{ padding:"9px 14px", borderRadius:9, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:13, cursor:"pointer" }}>닫기</button>
+            <button onClick={()=>{
+              if (!quickAddForm.memo.trim() || !quickAddForm.amount) return;
+              addTransactions([{
+                id:uid(), type:quickAddForm.type, amount:Number(quickAddForm.amount),
+                memo:quickAddForm.memo.trim(), date:quickAddForm.date,
+                category:quickAddForm.category || allCategories.find(c=>c.type===quickAddForm.type)?.name || "기타",
+                is_group:false,
+              }]);
+              setQuickAddForm(f=>({ ...f, memo:"", amount:"" })); // 유형/날짜/카테고리는 유지, 연속 입력 편의
+            }} disabled={!quickAddForm.memo.trim()||!quickAddForm.amount}
+              style={{ flex:1, padding:"9px", borderRadius:9, border:"none", background:(quickAddForm.memo.trim()&&quickAddForm.amount)?C.accent:C.border, color:"#fff", fontSize:13, fontWeight:700, cursor:"pointer" }}>추가</button>
+          </div>
         </div>
       )}
 
@@ -1639,13 +1701,13 @@ function InputScreen() {
                     </div>
                     {isEO&&(
                       <div style={{padding:"14px 16px",background:"#13172280",borderTop:`1px solid ${C.border}`}}>
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr minmax(120px,1fr)",gap:8,marginBottom:8}}>
                           <div><p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>금액</p>
                             <input type="text" value={fmt(item.amount)} onChange={e=>setParsedList(l=>l.map((x,j)=>j===i?{...x,amount:Number(e.target.value.replace(/,/g,""))}:x))}
-                              style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",color:C.expense,fontSize:13,fontWeight:700,boxSizing:"border-box",fontFamily:"'DM Mono',monospace"}}/></div>
+                              style={{width:"100%",minWidth:0,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 10px",color:C.expense,fontSize:13,fontWeight:700,boxSizing:"border-box",fontFamily:"'DM Mono',monospace"}}/></div>
                           <div><p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>날짜</p>
                             <input type="date" value={item.date} onChange={e=>setParsedList(l=>l.map((x,j)=>j===i?{...x,date:e.target.value}:x))}
-                              style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 8px",color:C.text,fontSize:12,boxSizing:"border-box"}}/></div>
+                              style={{width:"100%",minWidth:0,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 8px",color:C.text,fontSize:12,boxSizing:"border-box",overflow:"hidden"}}/></div>
                         </div>
                         <div style={{marginBottom:8}}><p style={{color:C.textMuted,fontSize:11,margin:"0 0 4px"}}>사용처</p>
                           <input type="text" value={item.memo} onChange={e=>setParsedList(l=>l.map((x,j)=>j===i?{...x,memo:e.target.value}:x))}
@@ -1705,7 +1767,7 @@ function InputScreen() {
                   <p style={{color:C.textMuted,fontSize:11,margin:"0 0 8px",fontWeight:600}}>항목</p>
                   {multiItems.map((item,i)=>(
                     <div key={item.id} style={{background:C.surface,borderRadius:12,padding:"12px",marginBottom:8,border:`1px solid ${C.border}`}}>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,marginBottom:6,alignItems:"center"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"minmax(132px,1.1fr) 1fr auto",gap:6,marginBottom:6,alignItems:"center"}}>
                         <input type="date" value={item.date} onChange={e=>{
                           const val=e.target.value;
                           setMultiItems(p=>p.map((x,j)=>j===i?{...x,date:val}:x));
@@ -2008,18 +2070,18 @@ function InputScreen() {
                     <input value={manualName} onChange={e=>setManualName(e.target.value)} placeholder="예) 여름휴가여행"
                       style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px",color:C.text,fontSize:14,boxSizing:"border-box"}}/>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14,overflow:"hidden"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr minmax(132px,1.1fr)",gap:8,marginBottom:14,overflow:"hidden"}}>
                     <div>
                       <p style={{color:C.textMuted,fontSize:11,margin:"0 0 5px"}}>카테고리</p>
                       <select value={manualCat} onChange={e=>{ setManualCat(e.target.value); setManualChildren(p=>p.map(c=>({...c,category:e.target.value}))); }}
-                        style={{width:"100%",background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:13,boxSizing:"border-box"}}>
+                        style={{width:"100%",minWidth:0,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",color:C.text,fontSize:13,boxSizing:"border-box"}}>
                         {allCategories.filter(c=>c.type==="expense").map(c=><option key={c.id} value={c.name}>{c.icon} {c.name}</option>)}
                       </select>
                     </div>
                     <div>
                       <p style={{color:C.textMuted,fontSize:11,margin:"0 0 5px"}}>날짜</p>
                       <input type="date" value={manualDate} onChange={e=>setManualDate(e.target.value)}
-                        style={{width:"100%",height:42,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"0 8px",color:C.text,fontSize:13,boxSizing:"border-box",overflow:"hidden"}}/>
+                        style={{width:"100%",minWidth:0,height:42,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:10,padding:"0 8px",color:C.text,fontSize:13,boxSizing:"border-box",overflow:"hidden"}}/>
                     </div>
                   </div>
                   <p style={{color:C.textMuted,fontSize:11,margin:"0 0 8px",fontWeight:600}}>세부 항목</p>
@@ -2114,7 +2176,7 @@ function StatsScreen() {
   const monthTx    = filterCurrentMonth(transactions);
   const summary    = calcSummary(monthTx);
   const catStats   = calcCategoryStats(monthTx, allCategories);
-  const { fixed, variable } = calcFixedVariable(monthTx, []);
+  const { fixed, variable } = calcFixedVariable(monthTx, allCategories);
   const yearlyTrend  = calcYearlyTrend(transactions, selectedYear);
   const categoryTrend = calcCategoryTrend(transactions, allCategories, selectedYear);
   const toggleCat = (n) => setSelectedCats(p=>p.includes(n)?p.filter(c=>c!==n):[...p,n]);
@@ -2264,7 +2326,7 @@ function StatsScreen() {
       {/* 고정비 vs 변동비 */}
       <div style={{ margin:"0 16px 16px", background:C.surface, borderRadius:16, padding:"16px 18px", border:`1px solid ${C.border}` }}>
         <p style={{ color:C.text, fontSize:13, fontWeight:600, margin:"0 0 12px" }}>고정비 vs 변동비</p>
-        {[{label:"고정비",amount:fixed,color:C.fixed},{label:"변동비",amount:variable,color:C.variable}].map(b=>{
+        {[{label:"변동비",amount:variable,color:C.variable},{label:"고정비",amount:fixed,color:C.fixed}].map(b=>{
           const total = fixed+variable||1;
           const ratio = Math.round((b.amount/total)*100);
           return (
@@ -3786,10 +3848,12 @@ export default function App() {
       } : null;
       if (budgetState) setBudgetsLocal(budgetState);
 
-      // categories 처리
+      // categories 처리 — 부모(고정비/변동비) 이름도 함께 매핑
+      const parentNameMap = {};
+      (catData||[]).filter(c=>c.is_parent).forEach(p=>{ parentNameMap[p.id]=p.name; });
       const catFormatted = catData ? catData
         .filter(c => !c.is_parent)
-        .map(c => ({ id:c.id, name:c.name, icon:c.icon, color:c.color, type:c.type, parentId:c.parent_id })) : [];
+        .map(c => ({ id:c.id, name:c.name, icon:c.icon, color:c.color, type:c.type, parentId:c.parent_id, parentName: parentNameMap[c.parent_id] || null })) : [];
       if (catFormatted.length) setAllCategories(catFormatted);
 
       // ── Phase 3: recData 의존 처리 (자동생성) ─────────────────
