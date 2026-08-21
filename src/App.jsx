@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.52";
+const APP_VERSION = "1.10.53";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -239,6 +239,27 @@ function calcCategoryStats(transactions, allCategories) {
   return Object.values(map)
     .map(c=>({ ...c, ratio:Math.round((c.amount/total)*100) }))
     .sort((a,b)=>b.amount-a.amount);
+}
+
+// 올해(1월~현재월) 누적 기준 카테고리별 평균 지출 비중(%) — 이번달 비중과 비교용
+function calcYearlyAvgCategoryRatio(transactions, allCategories, year) {
+  const now = new Date();
+  const curMonth = year === now.getFullYear() ? now.getMonth()+1 : 12;
+  const flat = transactions.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense");
+  const yearItems = flat.filter(t=>{
+    if (!t.date?.startsWith(String(year))) return false;
+    const m = Number(t.date.slice(5,7));
+    return m>=1 && m<=curMonth;
+  });
+  const total = yearItems.reduce((s,t)=>s+t.amount,0) || 1;
+  const map = {};
+  yearItems.forEach(t=>{
+    const key = getCat(t.category, allCategories).name;
+    map[key] = (map[key]||0) + t.amount;
+  });
+  const ratios = {};
+  Object.entries(map).forEach(([k,v])=>{ ratios[k] = (v/total)*100; });
+  return ratios;
 }
 
 function calcFixedVariable(transactions, allCategories) {
@@ -2176,6 +2197,7 @@ function StatsScreen() {
   const monthTx    = filterCurrentMonth(transactions);
   const summary    = calcSummary(monthTx);
   const catStats   = calcCategoryStats(monthTx, allCategories);
+  const yearlyAvgRatios = calcYearlyAvgCategoryRatio(transactions, allCategories, selectedYear);
   const { fixed, variable } = calcFixedVariable(monthTx, allCategories);
   const yearlyTrend  = calcYearlyTrend(transactions, selectedYear);
   const categoryTrend = calcCategoryTrend(transactions, allCategories, selectedYear);
@@ -2293,6 +2315,9 @@ function StatsScreen() {
             const bOver  = bPct !== null && bPct >= 100;
             const bWarn  = bPct !== null && bPct >= 80 && !bOver;
             const barCol = bOver ? C.expense : bWarn ? "#E67E22" : cat.color||C.accent;
+            const avgRatio = yearlyAvgRatios[s.category];
+            const showMarker = !catBudget && avgRatio !== undefined;
+            const diff = showMarker ? Math.round((s.ratio - avgRatio)*10)/10 : null;
             return (
               <div key={s.category} style={{ marginBottom:13 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
@@ -2309,12 +2334,24 @@ function StatsScreen() {
                     {catBudget > 0 && <span style={{ color:C.textMuted, fontSize:10, marginLeft:4 }}>/ {fmt(catBudget)}원</span>}
                   </div>
                 </div>
-                <div style={{ height:5, background:C.border, borderRadius:4, overflow:"hidden" }}>
-                  <div style={{ width:`${catBudget ? Math.min(bPct,100) : s.ratio}%`, height:"100%", borderRadius:4, background:barCol, opacity:0.8, transition:"width 0.4s" }} />
+                <div style={{ position:"relative", height:5, background:C.border, borderRadius:4, overflow:"visible" }}>
+                  <div style={{ height:"100%", width:`${catBudget ? Math.min(bPct,100) : s.ratio}%`, borderRadius:4, background:barCol, opacity:0.8, transition:"width 0.4s" }} />
+                  {showMarker && (
+                    <div style={{ position:"absolute", top:-2, left:`${Math.min(avgRatio,100)}%`, width:2, height:9, background:C.textSub, borderRadius:1, transform:"translateX(-1px)" }} />
+                  )}
                 </div>
-                {catBudget > 0 && (
+                {catBudget > 0 ? (
                   <div style={{ display:"flex", justifyContent:"flex-end", marginTop:3 }}>
                     <span style={{ color:bOver?C.expense:bWarn?"#E67E22":C.textMuted, fontSize:10 }}>{bPct}% 사용</span>
+                  </div>
+                ) : showMarker && (
+                  <div style={{ display:"flex", justifyContent:"space-between", marginTop:3 }}>
+                    <span style={{ color:C.textMuted, fontSize:10 }}>이번달 {s.ratio}% · 연평균 {Math.round(avgRatio)}%</span>
+                    {diff !== 0 && (
+                      <span style={{ color: diff>0 ? C.expense : C.income, fontSize:10, fontWeight:600 }}>
+                        {diff>0?"▲":"▼"}{Math.abs(diff)}%p
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
