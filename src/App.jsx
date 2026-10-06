@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.54";
+const APP_VERSION = "1.10.55";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2193,6 +2193,7 @@ function StatsScreen() {
   const now = new Date();
   const [trendMode,    setTrendMode]    = useState("total");
   const [selectedCats, setSelectedCats] = useState([]);
+  const [catDetail,    setCatDetail]    = useState(null); // null | 카테고리명
 
   // 데이터가 존재하는 연도 목록 (최신순)
   const availableYears = [...new Set(
@@ -2328,7 +2329,8 @@ function StatsScreen() {
             const showMarker = !catBudget && avgRatio !== undefined;
             const diff = showMarker ? Math.round((s.ratio - avgRatio)*10)/10 : null;
             return (
-              <div key={s.category} style={{ marginBottom:13 }}>
+              <div key={s.category} onClick={()=>setCatDetail(s.category)}
+                style={{ marginBottom:13, cursor:"pointer" }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:7 }}>
                     <div style={{ width:26, height:26, borderRadius:7, background:(cat.color||C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13 }}>
@@ -2337,6 +2339,7 @@ function StatsScreen() {
                     <span style={{ color:C.textSub, fontSize:12 }}>{s.category}</span>
                     {bOver && <span style={{ background:C.expense, color:"#fff", fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:8 }}>초과</span>}
                     {bWarn && <span style={{ background:"#E67E22", color:"#fff", fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:8 }}>주의</span>}
+                    <span style={{ color:C.textMuted, fontSize:11 }}>›</span>
                   </div>
                   <div style={{ textAlign:"right" }}>
                     <span style={{ color:C.text, fontSize:12, fontWeight:600, fontFamily:"'DM Mono',monospace" }}>{fmt(s.amount)}원</span>
@@ -2368,6 +2371,115 @@ function StatsScreen() {
           })
         }
       </div>
+
+      {/* 카테고리 상세 드릴다운 바텀시트 */}
+      {catDetail && (() => {
+        const detailCat = getCat(catDetail, allCategories);
+        // 올해 1월~현재월 월별 해당 카테고리 지출 집계
+        const curMonth = selectedYear===now.getFullYear() ? now.getMonth()+1 : 12;
+        const flatAll = transactions.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense" && getCat(t.category,allCategories).name===catDetail);
+        const monthly = [];
+        for (let m=1; m<=curMonth; m++) {
+          const ym = `${selectedYear}-${String(m).padStart(2,"0")}`;
+          const amt = flatAll.filter(t=>t.date?.startsWith(ym)).reduce((s,t)=>s+t.amount,0);
+          monthly.push({ month:`${m}월`, amount:amt });
+        }
+        const maxAmt = Math.max(...monthly.map(m=>m.amount), 1);
+        const yearTotal = flatAll.filter(t=>t.date?.startsWith(String(selectedYear))).reduce((s,t)=>s+t.amount,0);
+        // 올해 전체 거래 월별 그룹핑 (최신월 먼저)
+        const yearItems = flatAll.filter(t=>t.date?.startsWith(String(selectedYear))).sort((a,b)=>b.date.localeCompare(a.date));
+        const monthGroupsDetail = {};
+        yearItems.forEach(t=>{
+          const ym = t.date.slice(0,7);
+          if (!monthGroupsDetail[ym]) monthGroupsDetail[ym] = [];
+          monthGroupsDetail[ym].push(t);
+        });
+        const sortedYm = Object.keys(monthGroupsDetail).sort((a,b)=>b.localeCompare(a));
+
+        return (
+          <div style={{ position:"fixed", inset:0, zIndex:300, display:"flex", flexDirection:"column", justifyContent:"flex-end" }}
+            onClick={()=>setCatDetail(null)}>
+            <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.35)" }} />
+            <div onClick={e=>e.stopPropagation()}
+              style={{ background:C.surface, borderRadius:"20px 20px 0 0", maxHeight:"82vh", display:"flex", flexDirection:"column",
+                border:`1px solid ${C.border}`, position:"relative" }}>
+              {/* 핸들 */}
+              <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+                <div style={{ width:36, height:4, borderRadius:2, background:C.border }} />
+              </div>
+              {/* 헤더 */}
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 20px 14px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:38, height:38, borderRadius:11, background:(detailCat.color||C.accent)+"22", display:"flex", alignItems:"center", justifyContent:"center", fontSize:20 }}>
+                    {detailCat.icon}
+                  </div>
+                  <div>
+                    <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0 }}>{catDetail}</p>
+                    <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>{selectedYear}년 누적 · {yearItems.length}건</p>
+                  </div>
+                </div>
+                <p style={{ color:C.expense, fontSize:18, fontWeight:800, margin:0, fontFamily:"'DM Mono',monospace" }}>
+                  {fmt(yearTotal)}원
+                </p>
+              </div>
+              <div style={{ height:1, background:C.border, margin:"0 20px" }} />
+
+              <div style={{ overflowY:"auto", flex:1 }}>
+                {/* 월별 추이 미니 바차트 */}
+                <div style={{ padding:"16px 20px 8px" }}>
+                  <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 10px", fontWeight:600 }}>월별 추이</p>
+                  <div style={{ display:"flex", alignItems:"flex-end", gap:6, height:70 }}>
+                    {monthly.map(m=>(
+                      <div key={m.month} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                        <div style={{ width:"100%", height:50, display:"flex", alignItems:"flex-end" }}>
+                          <div style={{ width:"100%", height:`${Math.max((m.amount/maxAmt)*100,2)}%`, borderRadius:3,
+                            background: detailCat.color||C.accent, opacity: m.amount>0?0.85:0.2 }} />
+                        </div>
+                        <span style={{ color:C.textMuted, fontSize:9 }}>{m.month.replace("월","")}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ height:1, background:C.border, margin:"12px 20px" }} />
+
+                {/* 올해 전체 거래 목록 (월별 그룹) */}
+                <div style={{ padding:"4px 20px 8px" }}>
+                  <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px", fontWeight:600 }}>{selectedYear}년 전체 내역</p>
+                </div>
+                {yearItems.length===0
+                  ? <p style={{ color:C.textMuted, fontSize:14, textAlign:"center", padding:"32px 0" }}>항목이 없어요</p>
+                  : sortedYm.map(ym=>{
+                    const items = monthGroupsDetail[ym];
+                    const monthTotal = items.reduce((s,t)=>s+t.amount,0);
+                    const monthLabel = `${Number(ym.slice(5))}월`;
+                    return (
+                      <div key={ym}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 20px", background:C.surfaceHigh }}>
+                          <span style={{ color:C.text, fontSize:12, fontWeight:700 }}>{monthLabel}</span>
+                          <span style={{ color:C.textMuted, fontSize:11 }}>{fmt(monthTotal)}원 · {items.length}건</span>
+                        </div>
+                        {items.map((tx,i)=>(
+                          <div key={tx.id||i} style={{ display:"flex", alignItems:"center", padding:"11px 20px", borderBottom:`1px solid ${C.border}` }}>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <p style={{ color:C.text, fontSize:13, fontWeight:500, margin:"0 0 2px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{tx.memo}</p>
+                              <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>{fmtDate(tx.date)}</p>
+                            </div>
+                            <span style={{ color:C.expense, fontSize:13, fontWeight:700, fontFamily:"'DM Mono',monospace", flexShrink:0, marginLeft:8 }}>
+                              -{fmt(tx.amount)}원
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })
+                }
+                <div style={{ height:32 }} />
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 고정비 vs 변동비 */}
       <div style={{ margin:"0 16px 16px", background:C.surface, borderRadius:16, padding:"16px 18px", border:`1px solid ${C.border}` }}>
