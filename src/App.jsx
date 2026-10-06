@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.53";
+const APP_VERSION = "1.10.54";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -749,6 +749,15 @@ function TxEditForm({ tx, isChild=false, parentId=null, onSave, onDelete, onCanc
         <input type="text" value={form.memo} onChange={e=>setForm(f=>({...f,memo:e.target.value}))}
           style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
       </div>
+      <div style={{ marginBottom:10 }}>
+        <p style={{ color:C.textMuted, fontSize:11, margin:"0 0 4px" }}>카테고리</p>
+        <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}
+          style={{ width:"100%", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, boxSizing:"border-box" }}>
+          {allCategories.filter(c=>c.type===(tx.type||"expense")).map(c=>(
+            <option key={c.id} value={c.name}>{c.icon} {c.name}</option>
+          ))}
+        </select>
+      </div>
       <div style={{ display:"flex", gap:8, justifyContent:"space-between" }}>
         <button onClick={()=>onDelete(tx.id, isChild, parentId, tx.memo)}
           style={{ padding:"7px 12px", borderRadius:8, border:`1px solid ${C.expense}44`, background:"transparent", color:C.expense, fontSize:11, cursor:"pointer" }}>삭제</button>
@@ -862,7 +871,7 @@ function TransactionsScreen() {
       sb.update("transactions", {
         amount: Number(formData.amount), memo: formData.memo,
         date: formData.date, category: formData.category,
-      }, { id }, tok).catch(()=>{});
+      }, { id }, tok).catch(e=>console.log("거래 수정 DB 반영 실패:", e.message));
     }
   };
 
@@ -883,7 +892,7 @@ function TransactionsScreen() {
     // DB에서도 삭제
     const tok = localStorage.getItem("sb_token");
     if (tok) {
-      sb.delete("transactions", { id }, tok).catch(()=>{});
+      sb.delete("transactions", { id }, tok).catch(e=>console.log("거래 삭제 DB 반영 실패:", e.message));
     }
   };
 
