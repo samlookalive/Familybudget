@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.55";
+const APP_VERSION = "1.10.56";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -4231,13 +4231,29 @@ export default function App() {
         };
         const ins = await sb.insert("transactions", row, tok);
         const par = Array.isArray(ins)?ins[0]:ins;
+        // 로컬에 임시로 넣어둔 id("tx_xxxxx")를 DB가 발급한 진짜 UUID로 교체
+        // — 안 바꾸면 새로고침 전까지 수정/삭제 시 UUID 형식 오류가 남
+        if (par?.id) {
+          const realId = par.id;
+          setTransactionsLocal(prev => prev.map(t => t.id===item.id ? { ...t, id: realId } : t));
+        }
         if (item.is_group && item.children?.length && par?.id) {
-          await sb.insert("transactions",
+          const insertedKids = await sb.insert("transactions",
             item.children.map(c=>({
               family_id:cp.family_id, user_id:cp.id, parent_id:par.id,
               type:c.type||"expense", amount:c.amount, memo:c.memo,
               date:c.date||item.date, category:c.category, is_group:false,
             })), tok);
+          // 하위 항목들도 임시 id → 실제 UUID로 교체
+          if (Array.isArray(insertedKids) && insertedKids.length === item.children.length) {
+            setTransactionsLocal(prev => prev.map(t => {
+              if (t.id !== par.id) return t;
+              return {
+                ...t,
+                children: t.children.map((c, idx) => ({ ...c, id: insertedKids[idx]?.id || c.id })),
+              };
+            }));
+          }
         }
       }
     } catch(e) { /* 저장 실패 무시 */ }
