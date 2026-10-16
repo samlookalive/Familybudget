@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.56";
+const APP_VERSION = "1.10.58";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -2926,6 +2926,7 @@ function SettingsScreen() {
   const now2 = new Date();
   const monthLabel = `${now2.getFullYear()}년 ${now2.getMonth()+1}월`;
   const [showAdd,      setShowAdd]      = useState(false);
+  const [addConfirm,   setAddConfirm]   = useState(false);
   const [confirmItem,  setConfirmItem]  = useState(null);
   const [confirmAmt,   setConfirmAmt]   = useState("");
   const [expandedId,   setExpandedId]   = useState(null);
@@ -2970,7 +2971,7 @@ function SettingsScreen() {
   const submitConfirm = () => {
     const amount = Number(confirmAmt);
     const ym = new Date().toISOString().slice(0,7);
-    addTransactions([{ id:uid(), type:"expense", amount, memo:confirmItem.name, date:today(), category:confirmItem.category, is_group:false, from_recurring:true }]);
+    addTransactions([{ id:uid(), type:"expense", amount, memo:confirmItem.name, date:today(), category:confirmItem.category, is_group:false }]);
     setRecurring(prev=>prev.map(i=>i.id===confirmItem.id?{...i,status:"registered",last_amount:amount,last_generated_month:ym}:i));
 
     const tok = localStorage.getItem("sb_token");
@@ -3421,7 +3422,32 @@ function SettingsScreen() {
             </div>
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={()=>setShowAdd(false)} style={{ flex:1, padding:"14px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:15, cursor:"pointer" }}>취소</button>
-              <button onClick={addRec} style={{ flex:2, padding:"14px", borderRadius:12, border:"none", background:C.accent, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer" }}>추가하기</button>
+              <button onClick={()=>{
+                if (!newRec.name) return;
+                if (!newRec.amount) { alert("금액을 입력해 주세요"); return; }
+                setAddConfirm(true);
+              }} style={{ flex:2, padding:"14px", borderRadius:12, border:"none", background:C.accent, color:"#fff", fontSize:15, fontWeight:700, cursor:"pointer" }}>추가하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 정기항목 추가 확인 모달 */}
+      {addConfirm && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:250, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 24px" }}>
+          <div style={{ background:C.surface, borderRadius:20, padding:"24px", width:"100%", maxWidth:380, border:`1px solid ${C.border}` }}>
+            <div style={{ textAlign:"center", marginBottom:20 }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>{newRec.icon}</div>
+              <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:"0 0 8px" }}>"{newRec.name}" 항목을 추가할까요?</p>
+              <p style={{ color:C.textMuted, fontSize:13, margin:0 }}>
+                {newRec.amount_type==="fixed"?"매달 자동으로 등록돼요":"매달 금액을 입력해야 해요"} · {fmt(Number(newRec.amount))}원
+              </p>
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={()=>setAddConfirm(false)}
+                style={{ flex:1, padding:"13px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer", fontWeight:600 }}>다음에</button>
+              <button onClick={()=>{ setAddConfirm(false); addRec(); }}
+                style={{ flex:1, padding:"13px", borderRadius:12, border:"none", background:C.accent, color:"#fff", fontSize:14, cursor:"pointer", fontWeight:700 }}>추가</button>
             </div>
           </div>
         </div>
@@ -4045,7 +4071,7 @@ export default function App() {
                 type: "expense", amount: rec.amount,
                 memo: `${rec.icon||""} ${rec.name} (정기)`.trim(),
                 date: dateStr, category: rec.category || "기타",
-                is_group: false, from_recurring: true,
+                is_group: false,
               }, tok);
               await sb.update("recurring_transactions", { last_generated_month: ym, status: "registered" }, { id: rec.id }, tok);
             } catch(e) { console.log("정기지출 자동생성 실패:", rec.name, e.message); }
