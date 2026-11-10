@@ -1,10 +1,10 @@
 import React, { useState, useRef, useContext, createContext, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.59";
+const APP_VERSION = "1.10.60";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -517,22 +517,16 @@ function HomeScreen() {
         );
       })()}
 
-      {/* 일별 지출 버블 달력 */}
+      {/* 일별 지출 막대그래프 — 막대(날짜 칸)를 탭하면 요약 */}
       {(() => {
         const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth()+1;
         const monthLabel = `${month}월`;
         const todayNum = now.getDate();
-        const firstDow = new Date(year, month-1, 1).getDay();
-        const maxAmt = Math.max(...dailyExpense.map(d=>d.amount), 1);
-        const MAX_D = 34, MIN_D = 9;
-        const bubbleSize = (amt) => amt<=0 ? 0 : Math.round(MIN_D + (MAX_D-MIN_D)*Math.sqrt(amt/maxAmt));
         const monthTotal = dailyExpense.reduce((s,d)=>s+d.amount,0);
         const avgDaily = Math.round(monthTotal / Math.max(todayNum,1));
         const dowLabels = ["일","월","화","수","목","금","토"];
-        const cells = [...Array(firstDow).fill(null), ...dailyExpense];
-        const shortAmt = (v) => v>=10000 ? `${Math.round(v/10000)}만` : `${Math.round(v/1000)}천`;
 
         // 선택한 날짜 요약
         const sel = bubbleDay ? dailyExpense.find(d=>Number(d.day)===bubbleDay) : null;
@@ -615,36 +609,28 @@ function HomeScreen() {
               <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 12px" }}>
                 일평균 <span style={{ color:C.text, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{fmt(avgDaily)}원</span>
               </p>
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)" }}>
-                {dowLabels.map((w,i)=>(
-                  <div key={w} style={{ textAlign:"center", fontSize:10, paddingBottom:4, color:(i===0||i===6)?"#E8834A":C.textMuted }}>{w}</div>
-                ))}
-                {cells.map((d,i)=>{
-                  if (!d) return <div key={`b${i}`} />;
-                  const dayNum = Number(d.day);
-                  const isFuture = dayNum > todayNum;
-                  const isToday = dayNum === todayNum;
-                  const size = isFuture ? 0 : bubbleSize(d.amount);
-                  const color = d.isWeekend ? "#E8834A" : "#7CC1E8";
-                  return (
-                    <div key={d.day} onClick={()=>{ if(!isFuture) setBubbleDay(dayNum); }}
-                      style={{ display:"flex", flexDirection:"column", alignItems:"center", height:46, cursor:isFuture?"default":"pointer" }}>
-                      <span style={{ fontSize:9, lineHeight:"12px", color:isToday?C.accent:C.textMuted, fontWeight:isToday?700:400, opacity:isFuture?0.4:1 }}>{dayNum}</span>
-                      <div style={{ flex:1, width:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        {size>0 ? (
-                          <div style={{ width:size, height:size, borderRadius:"50%", background:isToday?C.accent:color, opacity:isToday?1:0.75,
-                            display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:9, fontWeight:700 }}>
-                            {size>=30 ? shortAmt(d.amount) : ""}
-                          </div>
-                        ) : !isFuture && (
-                          <div style={{ width:isToday?8:4, height:isToday?8:4, borderRadius:"50%", background:isToday?"transparent":C.border, border:isToday?`2px solid ${C.accent}`:"none", boxSizing:"border-box" }} />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+              <div style={{ width:"100%", height:130, touchAction:"none" }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dailyExpense} margin={{ top:4, right:4, left:-28, bottom:0 }}
+                    style={{ cursor:"pointer" }}
+                    onClick={(st)=>{ const n = Number(st?.activeLabel); if (n && n <= todayNum) setBubbleDay(n); }}>
+                    <XAxis dataKey="day" tick={{ fontSize:9, fill:C.textMuted }} axisLine={{stroke:C.border}} tickLine={false}
+                      interval={Math.ceil(dailyExpense.length/8)}/>
+                    <YAxis tick={{ fontSize:9, fill:C.textMuted }} axisLine={false} tickLine={false}
+                      tickFormatter={(v)=> v>=10000 ? `${Math.round(v/10000)}만` : v}/>
+                    <Tooltip formatter={(v)=>[`${fmt(v)}원`,"지출"]} labelFormatter={(d)=>`${monthLabel} ${d}일`}
+                      contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
+                    <Bar dataKey="amount" radius={[3,3,0,0]}>
+                      {dailyExpense.map((d,i)=>{
+                        const isToday = Number(d.day)===todayNum;
+                        const color = isToday ? C.accent : d.isWeekend ? "#E8834A" : "#7CC1E8";
+                        return <Cell key={i} fill={color} fillOpacity={isToday ? 1 : 0.65}/>;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-              <p style={{ color:C.textMuted, fontSize:10, margin:"8px 0 0", textAlign:"center" }}>원이 클수록 지출이 많은 날 · 탭하면 상세 내역</p>
+              <p style={{ color:C.textMuted, fontSize:10, margin:"6px 0 0", textAlign:"center" }}>막대를 탭하면 그날의 상세 내역</p>
             </div>
             {sheet}
           </>
@@ -664,40 +650,70 @@ function HomeScreen() {
             {catStats.length===0
               ? <p style={{ color:C.textMuted, fontSize:13, textAlign:"center", margin:"16px 0" }}>아직 지출 내역이 없어요</p>
               : <>
-                {/* 도넛 차트 */}
-                <div style={{ display:"flex", alignItems:"center", marginBottom:16 }}>
-                  <div style={{ width:160, height:160, flexShrink:0, position:"relative" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie data={catStats} dataKey="amount" nameKey="category"
-                          innerRadius={50} outerRadius={78} paddingAngle={2} stroke="none">
-                          {catStats.map((s,i)=>{
-                            const cat = getCat(s.category, allCategories);
-                            return <Cell key={i} fill={cat.color||C.accent} />;
-                          })}
-                        </Pie>
-                        <Tooltip formatter={(v)=>`${fmt(v)}원`}
-                          contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", textAlign:"center", pointerEvents:"none" }}>
-                      <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>총 지출</p>
-                      <p style={{ color:C.text, fontSize:17, fontWeight:800, margin:0 }}>{Math.round(catStats.reduce((s,c)=>s+c.amount,0)/10000)}만</p>
+                {/* 버블 차트 — 원 크기 = 지출액, 탭하면 카테고리 상세 */}
+                {(() => {
+                  const W = 340, H = 230, GAP = 3;
+                  const PALETTE = ["#5B7FFF","#E8834A","#2FA97A","#9B59B6","#D9951A","#E05C8A","#2FA3B5","#6B7A99","#4A90D9","#B8693F","#4FA85A","#8E5CB0","#C48A2C","#5C6BC0"];
+                  const maxAmt = catStats[0].amount || 1;
+                  const totalAmt = catStats.reduce((s,c)=>s+c.amount,0);
+                  // 큰 버블부터 중심에서 나선형으로 겹치지 않는 자리를 찾아 배치
+                  const layout = (scale) => {
+                    const placed = [];
+                    for (let i=0; i<catStats.length; i++) {
+                      const s = catStats[i];
+                      const r = Math.max(13, (16 + 50*Math.sqrt(s.amount/maxAmt)) * scale);
+                      let pos = null;
+                      if (placed.length === 0) pos = { x:W/2, y:H/2 };
+                      else {
+                        for (let t=0; t<900 && !pos; t++) {
+                          const ang = t*0.4;
+                          const rad = 2 + t*0.7;
+                          const x = W/2 + Math.cos(ang)*rad*1.35;
+                          const y = H/2 + Math.sin(ang)*rad;
+                          if (x-r < 0 || x+r > W || y-r < 0 || y+r > H) continue;
+                          if (placed.every(p => Math.hypot(p.x-x, p.y-y) >= p.r + r + GAP)) pos = { x, y };
+                        }
+                      }
+                      if (!pos) return null;
+                      placed.push({ ...s, i, r, ...pos });
+                    }
+                    return placed;
+                  };
+                  let scale = 1;
+                  let bubbles = layout(scale);
+                  while (!bubbles && scale > 0.3) { scale *= 0.9; bubbles = layout(scale); }
+                  if (!bubbles) bubbles = [];
+                  return (
+                    <div style={{ marginBottom:16 }}>
+                      <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 6px" }}>
+                        총 지출 <span style={{ color:C.text, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{fmt(totalAmt)}원</span>
+                      </p>
+                      <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
+                        {bubbles.map(b=>{
+                          const cat = getCat(b.category, allCategories);
+                          const color = PALETTE[b.i % PALETTE.length];
+                          const fs = Math.min(11, (b.r*1.75)/Math.max(b.category.length,2));
+                          const showName = b.r >= 24 && fs >= 8;
+                          const showPct  = showName && b.r >= 36;
+                          const showIcon = b.r >= 17;
+                          const txt = { textAnchor:"middle", fill:"#fff", stroke:"rgba(0,0,0,0.25)", strokeWidth:2, paintOrder:"stroke", pointerEvents:"none" };
+                          return (
+                            <g key={b.category} onClick={()=>setCatDrillDown(b.category)} style={{ cursor:"pointer" }}>
+                              <circle cx={b.x} cy={b.y} r={b.r} fill={color} fillOpacity={0.88} />
+                              {showIcon && (
+                                <text x={b.x} y={showName ? b.y - b.r*0.08 : b.y + b.r*0.22}
+                                  fontSize={Math.min(24, b.r*0.55)} textAnchor="middle" style={{ pointerEvents:"none" }}>{cat.icon}</text>
+                              )}
+                              {showName && <text x={b.x} y={b.y + b.r*0.42} fontSize={fs} fontWeight={700} {...txt}>{b.category}</text>}
+                              {showPct && <text x={b.x} y={b.y + b.r*0.42 + 11} fontSize={9} fontWeight={600} {...txt}>{b.ratio}%</text>}
+                            </g>
+                          );
+                        })}
+                      </svg>
+                      <p style={{ color:C.textMuted, fontSize:10, margin:"4px 0 0", textAlign:"center" }}>원이 클수록 지출이 많아요 · 탭하면 상세 내역</p>
                     </div>
-                  </div>
-                  <div style={{ flex:1, paddingLeft:12, display:"flex", flexDirection:"column", gap:5, minWidth:0 }}>
-                    {catStats.slice(0,4).map(s=>{
-                      const cat = getCat(s.category, allCategories);
-                      return (
-                        <div key={s.category} style={{ display:"flex", alignItems:"center", gap:5 }}>
-                          <div style={{ width:7, height:7, borderRadius:"50%", background:cat.color||C.accent, flexShrink:0 }} />
-                          <span style={{ color:C.textMuted, fontSize:11, flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.category}</span>
-                          <span style={{ color:C.textSub, fontSize:11, fontWeight:600 }}>{s.ratio}%</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* 카테고리별 상세 (기존 리스트) */}
                 {catStats.slice(0,5).map(s=>{
