@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, X
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.58";
+const APP_VERSION = "1.10.59";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -372,6 +372,7 @@ function HomeScreen() {
   const [drillDown,    setDrillDown]    = useState(null); // null | "fixed" | "variable"
   // 카테고리 드릴다운
   const [catDrillDown, setCatDrillDown] = useState(null); // null | "식비" | "교통" 등
+  const [bubbleDay,    setBubbleDay]    = useState(null); // null | 선택한 날짜(숫자)
 
   const flat = monthTx.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense");
   const isFixedCat = (t) => {
@@ -516,38 +517,137 @@ function HomeScreen() {
         );
       })()}
 
-      {/* 일별 지출 막대그래프 */}
+      {/* 일별 지출 버블 달력 */}
       {(() => {
         const now = new Date();
-        const monthLabel = `${now.getMonth()+1}월`;
-        const today = now.getDate();
+        const year = now.getFullYear();
+        const month = now.getMonth()+1;
+        const monthLabel = `${month}월`;
+        const todayNum = now.getDate();
+        const firstDow = new Date(year, month-1, 1).getDay();
+        const maxAmt = Math.max(...dailyExpense.map(d=>d.amount), 1);
+        const MAX_D = 34, MIN_D = 9;
+        const bubbleSize = (amt) => amt<=0 ? 0 : Math.round(MIN_D + (MAX_D-MIN_D)*Math.sqrt(amt/maxAmt));
+        const monthTotal = dailyExpense.reduce((s,d)=>s+d.amount,0);
+        const avgDaily = Math.round(monthTotal / Math.max(todayNum,1));
+        const dowLabels = ["일","월","화","수","목","금","토"];
+        const cells = [...Array(firstDow).fill(null), ...dailyExpense];
+        const shortAmt = (v) => v>=10000 ? `${Math.round(v/10000)}만` : `${Math.round(v/1000)}천`;
+
+        // 선택한 날짜 요약
+        const sel = bubbleDay ? dailyExpense.find(d=>Number(d.day)===bubbleDay) : null;
+        let sheet = null;
+        if (sel) {
+          const dateStr = `${year}-${String(month).padStart(2,"0")}-${String(sel.day).padStart(2,"0")}`;
+          const dayItems = flat.filter(t=>t.date===dateStr);
+          const dowText = dowLabels[new Date(year, month-1, Number(sel.day)).getDay()];
+          const catMap = {};
+          dayItems.forEach(t=>{
+            const c = getCat(t.category, allCategories);
+            catMap[c.name] = { icon:c.icon, amount:(catMap[c.name]?.amount||0)+t.amount };
+          });
+          const topCat = Object.entries(catMap).sort((a,b)=>b[1].amount-a[1].amount)[0];
+          const pct = (avgDaily>0 && sel.amount>0) ? Math.round((sel.amount-avgDaily)/avgDaily*100) : null;
+          sheet = (
+            <div style={{ position:"fixed", inset:0, zIndex:300, display:"flex", flexDirection:"column", justifyContent:"flex-end" }}
+              onClick={()=>setBubbleDay(null)}>
+              <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.35)" }} />
+              <div onClick={e=>e.stopPropagation()}
+                style={{ background:C.surface, borderRadius:"20px 20px 0 0", maxHeight:"75vh", display:"flex", flexDirection:"column", border:`1px solid ${C.border}`, position:"relative" }}>
+                <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+                  <div style={{ width:36, height:4, borderRadius:2, background:C.border }} />
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"12px 20px 14px" }}>
+                  <div>
+                    <p style={{ color:C.text, fontSize:16, fontWeight:700, margin:0 }}>{month}월 {Number(sel.day)}일 ({dowText})</p>
+                    <p style={{ color:C.textMuted, fontSize:11, margin:"2px 0 0" }}>{dayItems.length}건</p>
+                  </div>
+                  <p style={{ color:sel.amount>0?C.expense:C.textMuted, fontSize:18, fontWeight:800, margin:0, fontFamily:"'DM Mono',monospace" }}>
+                    {sel.amount>0 ? `-${fmt(sel.amount)}원` : "0원"}
+                  </p>
+                </div>
+                {(pct!==null || topCat) && (
+                  <div style={{ display:"flex", flexWrap:"wrap", gap:8, padding:"0 20px 14px" }}>
+                    {pct!==null && (
+                      <span style={{ background:pct>0?C.expense+"15":C.income+"15", color:pct>0?C.expense:C.income, fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:12 }}>
+                        일평균 대비 {pct>0?"+":""}{pct}%
+                      </span>
+                    )}
+                    {topCat && (
+                      <span style={{ background:C.accentSoft, color:C.accent, fontSize:11, fontWeight:600, padding:"4px 10px", borderRadius:12 }}>
+                        {topCat[1].icon} {topCat[0]} {fmt(topCat[1].amount)}원
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div style={{ height:1, background:C.border, margin:"0 20px" }} />
+                <div style={{ overflowY:"auto", flex:1 }}>
+                  {dayItems.length===0
+                    ? <p style={{ color:C.textMuted, fontSize:14, textAlign:"center", padding:"32px 0" }}>지출이 없는 날이에요</p>
+                    : dayItems.map((tx,i)=>{
+                        const c = getCat(tx.category, allCategories);
+                        return (
+                          <div key={tx.id||i} style={{ display:"flex", alignItems:"center", padding:"13px 20px", borderBottom:`1px solid ${C.border}` }}>
+                            <div style={{ width:34, height:34, borderRadius:10, background:(c.color||C.accent)+"18", display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, marginRight:12, flexShrink:0 }}>{c.icon}</div>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <p style={{ color:C.text, fontSize:14, fontWeight:500, margin:"0 0 2px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{tx.memo}</p>
+                              <p style={{ color:C.textMuted, fontSize:11, margin:0 }}>{c.name}</p>
+                            </div>
+                            <span style={{ color:C.expense, fontSize:14, fontWeight:700, fontFamily:"'DM Mono',monospace", flexShrink:0, marginLeft:8 }}>-{fmt(tx.amount)}원</span>
+                          </div>
+                        );
+                      })
+                  }
+                  <div style={{ height:32 }} />
+                </div>
+              </div>
+            </div>
+          );
+        }
+
         return (
-          <div style={{ margin:"0 16px 12px", background:C.surface, borderRadius:16, padding:"18px", border:`1px solid ${C.border}`, boxShadow:"0 1px 8px rgba(0,0,0,0.04)" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <p style={{ color:C.text, fontSize:14, fontWeight:600, margin:0 }}>일별 지출</p>
-              <span style={{ color:C.textMuted, fontSize:12 }}>{monthLabel}</span>
+          <>
+            <div style={{ margin:"0 16px 12px", background:C.surface, borderRadius:16, padding:"18px", border:`1px solid ${C.border}`, boxShadow:"0 1px 8px rgba(0,0,0,0.04)" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
+                <p style={{ color:C.text, fontSize:14, fontWeight:600, margin:0 }}>일별 지출</p>
+                <span style={{ color:C.textMuted, fontSize:12 }}>{monthLabel}</span>
+              </div>
+              <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 12px" }}>
+                일평균 <span style={{ color:C.text, fontWeight:700, fontFamily:"'DM Mono',monospace" }}>{fmt(avgDaily)}원</span>
+              </p>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(7, 1fr)" }}>
+                {dowLabels.map((w,i)=>(
+                  <div key={w} style={{ textAlign:"center", fontSize:10, paddingBottom:4, color:(i===0||i===6)?"#E8834A":C.textMuted }}>{w}</div>
+                ))}
+                {cells.map((d,i)=>{
+                  if (!d) return <div key={`b${i}`} />;
+                  const dayNum = Number(d.day);
+                  const isFuture = dayNum > todayNum;
+                  const isToday = dayNum === todayNum;
+                  const size = isFuture ? 0 : bubbleSize(d.amount);
+                  const color = d.isWeekend ? "#E8834A" : "#7CC1E8";
+                  return (
+                    <div key={d.day} onClick={()=>{ if(!isFuture) setBubbleDay(dayNum); }}
+                      style={{ display:"flex", flexDirection:"column", alignItems:"center", height:46, cursor:isFuture?"default":"pointer" }}>
+                      <span style={{ fontSize:9, lineHeight:"12px", color:isToday?C.accent:C.textMuted, fontWeight:isToday?700:400, opacity:isFuture?0.4:1 }}>{dayNum}</span>
+                      <div style={{ flex:1, width:"100%", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        {size>0 ? (
+                          <div style={{ width:size, height:size, borderRadius:"50%", background:isToday?C.accent:color, opacity:isToday?1:0.75,
+                            display:"flex", alignItems:"center", justifyContent:"center", color:"#fff", fontSize:9, fontWeight:700 }}>
+                            {size>=30 ? shortAmt(d.amount) : ""}
+                          </div>
+                        ) : !isFuture && (
+                          <div style={{ width:isToday?8:4, height:isToday?8:4, borderRadius:"50%", background:isToday?"transparent":C.border, border:isToday?`2px solid ${C.accent}`:"none", boxSizing:"border-box" }} />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p style={{ color:C.textMuted, fontSize:10, margin:"8px 0 0", textAlign:"center" }}>원이 클수록 지출이 많은 날 · 탭하면 상세 내역</p>
             </div>
-            <div style={{ width:"100%", height:130, touchAction:"none" }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dailyExpense} margin={{ top:4, right:4, left:-28, bottom:0 }}>
-                  <XAxis dataKey="day" tick={{ fontSize:9, fill:C.textMuted }} axisLine={{stroke:C.border}} tickLine={false}
-                    interval={Math.ceil(dailyExpense.length/8)}/>
-                  <YAxis tick={{ fontSize:9, fill:C.textMuted }} axisLine={false} tickLine={false}
-                    tickFormatter={(v)=> v>=10000 ? `${Math.round(v/10000)}만` : v}/>
-                  <Tooltip formatter={(v)=>[`${fmt(v)}원`,"지출"]} labelFormatter={(d)=>`${monthLabel} ${d}일`}
-                    contentStyle={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, fontSize:12 }}/>
-                  <Bar dataKey="amount" radius={[3,3,0,0]}>
-                    {dailyExpense.map((d,i)=>{
-                      const isToday = Number(d.day)===today;
-                      const color = isToday ? C.accent : d.isWeekend ? "#E8834A" : "#7CC1E8";
-                      const opacity = isToday ? 1 : 0.65;
-                      return <Cell key={i} fill={color} fillOpacity={opacity}/>;
-                    })}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+            {sheet}
+          </>
         );
       })()}
 
