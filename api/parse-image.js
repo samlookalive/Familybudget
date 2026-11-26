@@ -9,7 +9,8 @@ export default async function handler(req, res) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "API key not configured" });
 
-  const today = new Date().toISOString().slice(0, 10);
+  // 서버(Vercel)는 UTC로 동작해서 그대로 쓰면 한국 시간 0~9시에 '오늘'이 어제로 계산됨 → 한국 시간(UTC+9) 기준으로 맞춤
+  const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
   const singlePrompt = `오늘 날짜는 ${today}이야.
 이 이미지에서 카드/결제 내역을 추출해줘.
