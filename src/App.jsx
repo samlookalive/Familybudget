@@ -4,7 +4,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, Ca
 // ============================================================
 // 우리집 가계부 App
 // ============================================================
-const APP_VERSION = "1.10.60";
+const APP_VERSION = "1.10.63";
 
 // ══════════════════════════════════════════════════════════════
 // Supabase 클라이언트 (SDK)
@@ -180,11 +180,16 @@ function getCat(category, allCategories) {
 const fmt     = (n) => (n||0).toLocaleString("ko-KR");
 const fmtDate = (d) => { try { const [,m,day]=d.split("-"); return `${m}/${day}`; } catch { return d; } };
 const uid     = () => "tx_" + Math.random().toString(36).slice(2,10);
-const today   = () => new Date().toISOString().split("T")[0];
+// 날짜/월 문자열은 기기(한국) 시간 기준으로 만듭니다.
+// toISOString()은 UTC라서 한국에서는 0~9시에 하루(월초엔 한 달) 전으로 계산되고,
+// new Date(y, m, 1).toISOString()은 자정이 전날 15시(UTC)가 되어 달이 한 달 밀립니다.
+const localDateStr  = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const localMonthStr = (d = new Date()) => localDateStr(d).slice(0,7);
+const today   = () => localDateStr();
 
 // 이번 달(YYYY-MM) 거래만 필터링. 묶음 항목은 children도 이번 달만 남기고, 합계/건수 재계산
 const filterCurrentMonth = (transactions) => {
-  const ym = new Date().toISOString().slice(0,7);
+  const ym = localMonthStr();
   return transactions
     .map(tx => {
       if (tx.is_group) {
@@ -274,6 +279,126 @@ function calcFixedVariable(transactions, allCategories) {
   return { fixed: Math.max(fixed,0), variable: Math.max(variable,0) };
 }
 
+// ══════════════════════════════════════════════════════════════
+// AI 지출 분석 — 요약 숫자 계산(코드가 계산) + 결과 캐시
+// ══════════════════════════════════════════════════════════════
+const AI_EARLY_DAYS = 3; // 매월 이 날짜까지는 '월초'로 보고 이번 달 대신 지난달 분석을 보여줌
+const pad2    = (n) => String(n).padStart(2,"0");
+const localYmd = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const ymKey   = (y, m) => `${y}-${pad2(m)}`;
+
+// 특정 달의 1일~maxDay일 지출을 카테고리별로 합산 (고정비/변동비 구분 포함)
+function sumExpenseByCategory(flat, ym, maxDay, allCategories) {
+  const cats = {};
+  let total = 0, fixed = 0;
+  flat.forEach(t => {
+    if (!t.date || !t.date.startsWith(ym)) return;
+    if (Number(t.date.slice(8,10)) > maxDay) return;
+    const name = getCat(t.category, allCategories).name;
+    cats[name] = (cats[name]||0) + t.amount;
+    total += t.amount;
+    const c = allCategories?.find(x => x.name === t.category);
+    if (c?.parentName === "고정비") fixed += t.amount;
+  });
+  return { total, fixed, variable: total - fixed, cats };
+}
+
+function diffCategories(thisCats, prevCats) {
+  const names = new Set([...Object.keys(thisCats), ...Object.keys(prevCats)]);
+  return [...names].map(n => ({ name:n, amount:thisCats[n]||0, previous:prevCats[n]||0, diff:(thisCats[n]||0)-(prevCats[n]||0) }));
+}
+
+// mode "current": 이번 달 1일~오늘 vs 지난달 같은 기간 / mode "lastMonth": 지난달 전체 vs 그 전달 전체
+// 반환: { payload: AI에게 보낼 요약 숫자, stats: 카드에 직접 표시할 숫자 }
+function buildSpendingSummary(transactions, allCategories, budgets, now, mode) {
+  const flat = transactions.flatMap(t => t.is_group ? (t.children||[]) : [t]).filter(t => t.type === "expense");
+  const y = now.getFullYear(), m = now.getMonth()+1, d = now.getDate();
+  const prev = new Date(y, m-2, 1);
+  const py = prev.getFullYear(), pm = prev.getMonth()+1;
+  const pdim = new Date(py, pm, 0).getDate();
+  const pct = (a, b) => b > 0 ? Math.round((a-b)/b*100) : null;
+  const asOf = localYmd(now);
+
+  if (mode === "current") {
+    const dim  = new Date(y, m, 0).getDate();
+    const sameDay = Math.min(d, pdim);
+    const cur  = sumExpenseByCategory(flat, ymKey(y,m),   d,       allCategories);
+    const same = sumExpenseByCategory(flat, ymKey(py,pm), sameDay, allCategories);
+    const full = sumExpenseByCategory(flat, ymKey(py,pm), 31,      allCategories);
+    const projected = Math.round(cur.total / d * dim);
+    const rows = diffCategories(cur.cats, same.cats);
+    const budget = (budgets?.totalEnabled && budgets.total > 0)
+      ? { total:budgets.total, usedPercent:Math.round(cur.total/budgets.total*100), projectedPercent:Math.round(projected/budgets.total*100) }
+      : null;
+    return {
+      payload: {
+        today: `${m}월 ${d}일`, daysElapsed: d, daysInMonth: dim,
+        thisMonth:           { label:`${m}월 1~${d}일`,       total:cur.total,  fixed:cur.fixed,  variable:cur.variable },
+        lastMonthSamePeriod: { label:`${pm}월 1~${sameDay}일`, total:same.total, fixed:same.fixed, variable:same.variable },
+        lastMonthFull:       { label:`${pm}월 전체`,           total:full.total },
+        hasComparison: same.total > 0,
+        projectedMonthEnd: projected,
+        topCategories: [...rows].sort((a,b)=>b.amount-a.amount).filter(r=>r.amount>0).slice(0,3)
+          .map(r => ({ name:r.name, amount:r.amount, sharePercent:cur.total>0 ? Math.round(r.amount/cur.total*100) : 0 })),
+        biggestChanges: rows.filter(r=>r.diff!==0).sort((a,b)=>Math.abs(b.diff)-Math.abs(a.diff)).slice(0,5)
+          .map(r => ({ name:r.name, thisMonth:r.amount, lastMonthSamePeriod:r.previous, diff:r.diff })),
+        budget,
+      },
+      stats: { kind:"current", asOf, thisLabel:`${m}월 1~${d}일`, thisTotal:cur.total, prevLabel:`${pm}월 같은 기간`, prevTotal:same.total, changePercent:pct(cur.total, same.total), projected },
+    };
+  }
+
+  // lastMonth
+  const q  = new Date(y, m-3, 1);
+  const qy = q.getFullYear(), qm = q.getMonth()+1;
+  const a = sumExpenseByCategory(flat, ymKey(py,pm), 31, allCategories);
+  const b = sumExpenseByCategory(flat, ymKey(qy,qm), 31, allCategories);
+  const rows = diffCategories(a.cats, b.cats);
+  return {
+    payload: {
+      month: `${pm}월`, total:a.total, fixed:a.fixed, variable:a.variable,
+      previousMonth: { label:`${qm}월`, total:b.total },
+      hasComparison: b.total > 0,
+      topCategories: [...rows].sort((x,y2)=>y2.amount-x.amount).filter(r=>r.amount>0).slice(0,3)
+        .map(r => ({ name:r.name, amount:r.amount, sharePercent:a.total>0 ? Math.round(r.amount/a.total*100) : 0 })),
+      biggestChanges: rows.filter(r=>r.diff!==0).sort((x,y2)=>Math.abs(y2.diff)-Math.abs(x.diff)).slice(0,5)
+        .map(r => ({ name:r.name, thisMonth:r.amount, previousMonth:r.previous, diff:r.diff })),
+    },
+    stats: { kind:"lastMonth", asOf, thisLabel:`${pm}월`, thisTotal:a.total, prevLabel:`${qm}월`, prevTotal:b.total, changePercent:pct(a.total, b.total), projected:null },
+  };
+}
+
+// 하루 1회 자동 분석을 위한 기기 내 캐시 (가족/계정이 다르면 무시)
+const AI_CACHE_KEY = "ai_analysis";
+function readAiCache(fid) {
+  try { const c = JSON.parse(localStorage.getItem(AI_CACHE_KEY) || "null"); return (c && c.fid === fid) ? c : null; }
+  catch(e) { return null; }
+}
+function writeAiCache(fid, patch) {
+  try { localStorage.setItem(AI_CACHE_KEY, JSON.stringify({ ...(readAiCache(fid) || {}), ...patch, fid })); }
+  catch(e) { /* 용량 초과 등은 무시 */ }
+}
+
+// 같은 요청이 동시에 두 번 나가지 않도록 진행 중인 요청을 공유
+const aiInflight = {};
+function fetchSpendingAnalysis(mode, built, key) {
+  if (aiInflight[key]) return aiInflight[key];
+  const p = (async () => {
+    const res = await fetch("/api/analyze-spending", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, summary: built.payload }),
+    });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch(e) { throw new Error(`응답 파싱 실패(${res.status})`); }
+    if (!res.ok || !data.analysis) throw new Error(data.error || `HTTP ${res.status}`);
+    return { ...data.analysis, stats: built.stats };
+  })().finally(() => { delete aiInflight[key]; });
+  aiInflight[key] = p;
+  return p;
+}
+
 // 올해(1월~현재월) 월별 수입/지출 집계 → recharts AreaChart용 데이터
 function calcYearlyTrend(transactions, year) {
   const now = new Date();
@@ -336,7 +461,7 @@ function calcDailyExpense(transactions) {
 // 홈 화면
 // ══════════════════════════════════════════════════════════════
 function HomeScreen() {
-  const { transactions, recurring, budgets, profile, allCategories } = useApp();
+  const { transactions, recurring, budgets, profile, allCategories, dataReady } = useApp();
   const monthTx  = filterCurrentMonth(transactions);
   const summary  = calcSummary(monthTx);
   const catStats = calcCategoryStats(monthTx, allCategories);
@@ -348,7 +473,7 @@ function HomeScreen() {
     const months = [];
     for (let i=1; i<=3; i++) {
       const d = new Date(now2.getFullYear(), now2.getMonth()-i, 1);
-      months.push(d.toISOString().slice(0,7));
+      months.push(localMonthStr(d));
     }
     const flat = transactions.flatMap(t=>t.is_group?t.children:[t]);
     const sums = months.map(ym => flat.filter(t=>t.type==="income" && t.date?.startsWith(ym)).reduce((s,t)=>s+t.amount,0));
@@ -373,6 +498,70 @@ function HomeScreen() {
   // 카테고리 드릴다운
   const [catDrillDown, setCatDrillDown] = useState(null); // null | "식비" | "교통" 등
   const [bubbleDay,    setBubbleDay]    = useState(null); // null | 선택한 날짜(숫자)
+
+  // ── AI 지출 분석 카드 (하루 1회 자동, 결과는 기기에 저장) ─────────
+  const [aiState, setAiState] = useState(() => {
+    try {
+      const fid = profile?.family_id;
+      const cache = fid ? readAiCache(fid) : null;
+      if (!cache) return { status:"idle" };
+      const n = new Date();
+      const prevD = new Date(n.getFullYear(), n.getMonth()-1, 1);
+      if (n.getDate() <= AI_EARLY_DAYS) {
+        const hit = cache.last?.month === ymKey(prevD.getFullYear(), prevD.getMonth()+1) ? cache.last.result : null;
+        if (hit) return { status:"done", kind:"lastMonth", reason:"early", result:hit };
+      } else if (cache.current?.date === localYmd(n)) {
+        return { status:"done", kind:"current", reason:null, result:cache.current.result };
+      }
+    } catch(e) {}
+    return { status:"idle" };
+  });
+
+  useEffect(() => {
+    if (!dataReady || !profile?.family_id) return;
+    const fid = profile.family_id;
+    const now = new Date();
+    const todayStr = localYmd(now);
+    const prevD = new Date(now.getFullYear(), now.getMonth()-1, 1);
+    const prevKey = ymKey(prevD.getFullYear(), prevD.getMonth()+1);
+
+    // 이번 달 분석이 가능한지 판단 — 월초이거나 이번 달 지출이 없으면 지난달 분석으로 대체
+    const curBuilt = buildSpendingSummary(transactions, allCategories, budgets, now, "current");
+    let plan = "current", reason = null;
+    if (now.getDate() <= AI_EARLY_DAYS)        { plan = "lastMonth"; reason = "early"; }
+    else if (curBuilt.stats.thisTotal <= 0)    { plan = "lastMonth"; reason = "empty"; }
+    const built = plan === "current" ? curBuilt : buildSpendingSummary(transactions, allCategories, budgets, now, "lastMonth");
+
+    // 보여줄 지출이 아예 없으면 카드를 숨김
+    if (built.stats.thisTotal <= 0) { setAiState({ status:"hidden" }); return; }
+
+    const periodKey = plan === "current" ? todayStr : prevKey;
+    const cache = readAiCache(fid);
+    const hit = plan === "current"
+      ? (cache?.current?.date === todayStr ? cache.current.result : null)
+      : (cache?.last?.month === prevKey ? cache.last.result : null);
+    if (hit) { setAiState({ status:"done", kind:plan, reason, result:hit }); return; }
+
+    // 직전에 실패했다면 30분 동안은 다시 호출하지 않음 (오류가 계속될 때 호출이 반복되는 것을 방지)
+    const failed = cache?.fail;
+    if (failed && failed.key === `${plan}:${periodKey}` && Date.now() - failed.at < 30*60*1000) {
+      setAiState({ status:"hidden" }); return;
+    }
+
+    let cancelled = false;
+    setAiState(s => (s.status === "done" && s.kind === plan) ? s : { status:"loading", kind:plan, reason });
+    fetchSpendingAnalysis(plan, built, `${fid}:${plan}:${periodKey}`)
+      .then(result => {
+        writeAiCache(fid, plan === "current" ? { current:{ date:todayStr, result } } : { last:{ month:prevKey, result } });
+        if (!cancelled) setAiState({ status:"done", kind:plan, reason, result });
+      })
+      .catch(e => {
+        console.log("AI 지출 분석 실패:", e.message);
+        writeAiCache(fid, { fail:{ key:`${plan}:${periodKey}`, at:Date.now() } });
+        if (!cancelled) setAiState({ status:"hidden" });
+      });
+    return () => { cancelled = true; };
+  }, [dataReady, profile?.family_id]);
 
   const flat = monthTx.flatMap(t=>t.is_group?t.children:[t]).filter(t=>t.type==="expense");
   const isFixedCat = (t) => {
@@ -513,6 +702,65 @@ function HomeScreen() {
               <span style={{ color:C.textMuted, fontSize:11 }}>사용 {fmt(summary.expense)}원</span>
               <span style={{ color:C.textMuted, fontSize:11 }}>한도 {fmt(budgets.total)}원</span>
             </div>
+          </div>
+        );
+      })()}
+
+      {/* AI 지출 분석 */}
+      {(aiState.status === "loading" || aiState.status === "done") && (() => {
+        const st = aiState;
+        const r = st.result;
+        const s = r?.stats;
+        const pctText  = (p) => (p === null || p === undefined) ? "" : `${p > 0 ? "+" : ""}${p}%`;
+        const pctColor = (p) => p > 0 ? C.expense : p < 0 ? C.income : C.textMuted;
+        const num = { color:C.text, fontWeight:700, fontFamily:"'DM Mono',monospace" };
+        return (
+          <div style={{ margin:"0 16px 12px", background:C.surface, borderRadius:16, padding:"16px 18px", border:`1px solid ${C.border}`, boxShadow:"0 1px 8px rgba(0,0,0,0.04)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <p style={{ color:C.text, fontSize:14, fontWeight:600, margin:0 }}>🤖 AI 지출 분석</p>
+              {st.status === "done" && st.kind === "current" && s?.asOf && (
+                <span style={{ color:C.textMuted, fontSize:10 }}>{Number(s.asOf.slice(5,7))}/{Number(s.asOf.slice(8,10))} 기준</span>
+              )}
+            </div>
+            {st.status === "loading" ? (
+              <p style={{ color:C.textMuted, fontSize:13, margin:0 }}>
+                {st.kind === "lastMonth" ? "지난달 지출을 분석하고 있어요..." : "이번 달 지출을 분석하고 있어요..."}
+              </p>
+            ) : (
+              <>
+                {st.kind === "lastMonth" && (
+                  <>
+                    <p style={{ color:C.text, fontSize:13, fontWeight:600, margin:"0 0 2px" }}>이번 달은 아직 분석 중이에요</p>
+                    <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 12px", lineHeight:1.5 }}>
+                      {st.reason === "empty" ? "이번 달 지출이 아직 없어요." : `월초라 쌓인 지출이 적어서 ${AI_EARLY_DAYS+1}일부터 분석해 드려요.`}
+                    </p>
+                    <div style={{ height:1, background:C.border, margin:"0 0 12px" }} />
+                    <p style={{ color:C.accent, fontSize:12, fontWeight:700, margin:"0 0 8px" }}>📅 {s?.thisLabel}은 이랬어요</p>
+                  </>
+                )}
+                {s && (
+                  <p style={{ color:C.textMuted, fontSize:12, margin:"0 0 8px", lineHeight:1.7 }}>
+                    {s.thisLabel} <span style={num}>{fmt(s.thisTotal)}원</span>
+                    {s.prevTotal > 0 && (
+                      <> · {s.prevLabel} <span style={num}>{fmt(s.prevTotal)}원</span> <span style={{ color:pctColor(s.changePercent), fontWeight:700 }}>({pctText(s.changePercent)})</span></>
+                    )}
+                    {s.kind === "current" && s.projected > 0 && (
+                      <> · 월말 예상 <span style={num}>{fmt(s.projected)}원</span></>
+                    )}
+                  </p>
+                )}
+                {r?.headline && <p style={{ color:C.text, fontSize:14, fontWeight:600, margin:"0 0 8px", lineHeight:1.5 }}>{r.headline}</p>}
+                {(r?.points || []).map((pt, i) => (
+                  <div key={i} style={{ display:"flex", gap:6, margin:"0 0 5px" }}>
+                    <span style={{ color:C.accent, fontSize:12, lineHeight:"19px" }}>•</span>
+                    <p style={{ color:C.textSub, fontSize:13, margin:0, lineHeight:1.5 }}>{pt}</p>
+                  </div>
+                ))}
+                {r?.tip && (
+                  <p style={{ color:C.accent, background:C.accentSoft, fontSize:12, fontWeight:600, margin:"10px 0 0", padding:"8px 10px", borderRadius:8, lineHeight:1.5 }}>💡 {r.tip}</p>
+                )}
+              </>
+            )}
           </div>
         );
       })()}
@@ -887,6 +1135,40 @@ function TxEditForm({ tx, isChild=false, parentId=null, onSave, onDelete, onCanc
 }
 
 // ══════════════════════════════════════════════════════════════
+// 묶음 항목 이름 수정 / 삭제 줄 — 묶음을 펼치면 맨 위에 표시
+// (TransactionsScreen 밖에 정의해서 입력 중에도 포커스가 유지됨)
+// ══════════════════════════════════════════════════════════════
+function GroupActionBar({ group, onRename, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(group.memo || "");
+  const canSave = name.trim().length > 0;
+  const save = () => { if (!canSave) return; onRename(group.id, name.trim()); setEditing(false); };
+
+  if (editing) {
+    return (
+      <div style={{ display:"flex", gap:8, alignItems:"center", padding:"10px 16px", background:C.accentSoft, borderBottom:`1px solid ${C.border}` }}>
+        <input value={name} autoFocus onChange={e=>setName(e.target.value)}
+          onKeyDown={e=>{ if (e.key==="Enter") save(); if (e.key==="Escape") setEditing(false); }}
+          placeholder="묶음 이름"
+          style={{ flex:1, minWidth:0, background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 10px", color:C.text, fontSize:14, boxSizing:"border-box" }} />
+        <button onClick={()=>setEditing(false)}
+          style={{ flexShrink:0, padding:"8px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:12, cursor:"pointer" }}>취소</button>
+        <button onClick={save} disabled={!canSave}
+          style={{ flexShrink:0, padding:"8px 14px", borderRadius:8, border:"none", background:canSave?C.accent:C.border, color:"#fff", fontSize:12, fontWeight:700, cursor:canSave?"pointer":"default" }}>저장</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display:"flex", gap:8, padding:"10px 16px", borderBottom:`1px solid ${C.border}` }}>
+      <button onClick={()=>{ setName(group.memo || ""); setEditing(true); }}
+        style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:C.textSub, fontSize:12, fontWeight:600, cursor:"pointer" }}>✏️ 이름 수정</button>
+      <button onClick={()=>onDelete(group)}
+        style={{ flex:1, padding:"8px", borderRadius:8, border:`1px solid ${C.expense}44`, background:C.surface, color:C.expense, fontSize:12, fontWeight:600, cursor:"pointer" }}>🗑️ 묶음 삭제</button>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
 // 거래 내역 화면
 // ══════════════════════════════════════════════════════════════
 function TransactionsScreen() {
@@ -907,7 +1189,7 @@ function TransactionsScreen() {
 
   const now = new Date();
   const thisYear = now.getFullYear();
-  const thisYM = now.toISOString().slice(0,7); // 이번달 YYYY-MM
+  const thisYM = localMonthStr(now); // 이번달 YYYY-MM
 
   // 데이터 있는 연도 목록 (최신순)
   const availableYears = [...new Set(
@@ -993,8 +1275,25 @@ function TransactionsScreen() {
 
   const requestDelete = (id, isChild, parentId, memo) => setDeleteTarget({ id, isChild, parentId, memo });
 
+  // 묶음 이름 수정 — 화면에 먼저 반영하고 DB에도 저장
+  const renameGroup = (id, newName) => {
+    const name = (newName || "").trim();
+    if (!name) return;
+    setTransactions(prev => prev.map(tx => tx.id === id ? { ...tx, memo: name } : tx));
+    const tok = localStorage.getItem("sb_token");
+    if (tok) {
+      sb.update("transactions", { memo: name }, { id }, tok).catch(e=>console.log("묶음 이름 수정 DB 반영 실패:", e.message));
+    }
+  };
+
+  // 묶음 삭제 요청 — 하위 항목 건수를 확인창에 같이 보여줌
+  const requestGroupDelete = (group) => setDeleteTarget({
+    id: group.id, isChild:false, parentId:null, memo: group.memo,
+    isGroup:true, childCount:(group.children || []).length,
+  });
+
   const execDelete = () => {
-    const { id, isChild, parentId } = deleteTarget;
+    const { id, isChild, parentId, isGroup } = deleteTarget;
     setTransactions(prev=>{
       if (isChild) return prev.map(tx=>{
         if (tx.id!==parentId) return tx;
@@ -1004,11 +1303,19 @@ function TransactionsScreen() {
       return prev.filter(tx=>tx.id!==id);
     });
     setEditingId(null); setDeleteTarget(null);
+    if (isGroup) setExpandedId(null);
 
     // DB에서도 삭제
     const tok = localStorage.getItem("sb_token");
     if (tok) {
-      sb.delete("transactions", { id }, tok).catch(e=>console.log("거래 삭제 DB 반영 실패:", e.message));
+      if (isGroup) {
+        // 묶음: 하위 항목 행을 먼저 지운 뒤 부모 행을 삭제 (하위 행이 DB에 남지 않도록)
+        sb.delete("transactions", { parent_id: id }, tok)
+          .then(() => sb.delete("transactions", { id }, tok))
+          .catch(e=>console.log("묶음 삭제 DB 반영 실패:", e.message));
+      } else {
+        sb.delete("transactions", { id }, tok).catch(e=>console.log("거래 삭제 DB 반영 실패:", e.message));
+      }
     }
   };
 
@@ -1086,6 +1393,9 @@ function TransactionsScreen() {
               <p style={{ color:C.textMuted, fontSize:13, margin:0 }}>
                 <span style={{ color:C.text, fontWeight:600 }}>"{deleteTarget.memo}"</span> 항목이<br/>영구적으로 삭제됩니다
               </p>
+              {deleteTarget.isGroup && (
+                <p style={{ color:C.expense, fontSize:13, fontWeight:600, margin:"10px 0 0" }}>하위 {deleteTarget.childCount}건도 함께 삭제돼요</p>
+              )}
             </div>
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={()=>setDeleteTarget(null)} style={{ flex:1, padding:"13px", borderRadius:12, border:`1px solid ${C.border}`, background:"transparent", color:C.textMuted, fontSize:14, cursor:"pointer", fontWeight:600 }}>취소</button>
@@ -1289,6 +1599,7 @@ function TransactionsScreen() {
                       <TxRow tx={tx} />
                       {tx.is_group && expandedId===tx.id && (
                         <div style={{ background:C.surfaceHigh }}>
+                          <GroupActionBar group={tx} onRename={renameGroup} onDelete={requestGroupDelete} />
                           {tx.children.map(child=>(
                             <div key={child.id}>
                               <TxRow tx={child} isChild parentId={tx.id} />
@@ -3086,7 +3397,7 @@ function SettingsScreen() {
   };
   const submitConfirm = () => {
     const amount = Number(confirmAmt);
-    const ym = new Date().toISOString().slice(0,7);
+    const ym = localMonthStr();
     addTransactions([{ id:uid(), type:"expense", amount, memo:confirmItem.name, date:today(), category:confirmItem.category, is_group:false }]);
     setRecurring(prev=>prev.map(i=>i.id===confirmItem.id?{...i,status:"registered",last_amount:amount,last_generated_month:ym}:i));
 
@@ -4108,6 +4419,7 @@ export default function App() {
     categories: {},
   });
   const [allCategories, setAllCategories] = useState([]);
+  const [dataReady, setDataReady] = useState(false); // 서버에서 최신 데이터 로딩이 한 번 끝났는지 (AI 분석 시작 신호)
   const [toast, setToast] = useState(null); // {name, count}
   const [highlightIds, setHighlightIds] = useState(new Set());
   const now = new Date();
@@ -4116,7 +4428,7 @@ export default function App() {
   const _loadAll = async (fid, tok) => {
     try {
       const nowDate = new Date();
-      const ym = nowDate.toISOString().slice(0,7);
+      const ym = localMonthStr(nowDate);
 
       // ── Phase 1: 독립적인 4개 호출 동시 실행 ──────────────────
       const [txData, recData, bData, catData] = await Promise.all([
@@ -4244,6 +4556,7 @@ export default function App() {
       } catch(e) { /* 저장 실패 무시 (용량 초과 등) */ }
 
     } catch(e) { ; }
+    finally { setDataReady(true); }
   };
 
   // ── 앱 시작 시 1번만 실행 ─────────────────────────────────
@@ -4415,7 +4728,7 @@ export default function App() {
     if (!tok || !profile?.family_id) return;
     try {
       await sb.upsert("budgets",{
-        family_id:profile.family_id, year_month:new Date().toISOString().slice(0,7),
+        family_id:profile.family_id, year_month:localMonthStr(),
         total:nb.total, total_enabled:nb.totalEnabled, categories:nb.categories,
       },"family_id,year_month",tok);
     } catch(e) { ; }
@@ -4427,6 +4740,8 @@ export default function App() {
     localStorage.removeItem("sb_token");
     setToken(null); setAuthUser(null); setProfile(null);
     setTransactionsLocal(INIT_TRANSACTIONS);
+    setDataReady(false);
+    localStorage.removeItem("ai_analysis");
   };
 
   // 백그라운드 5분+ 후 포커스 복귀 시 재로드
@@ -4609,6 +4924,7 @@ export default function App() {
     budgets, setBudgets, token, profile, setProfile, authUser, handleSignOut,
     allCategories, setAllCategories,
     highlightIds, setHighlightIds,
+    dataReady,
   };
 
   return (
