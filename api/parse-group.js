@@ -9,17 +9,15 @@ export default async function handler(req, res) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "API key not configured" });
 
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now()-86400000).toISOString().slice(0, 10);
+  // 서버(Vercel)는 UTC로 동작해서 그대로 쓰면 한국 시간 0~9시에 '오늘'이 어제로 계산됨 → 한국 시간(UTC+9) 기준으로 맞춤
+  const DAY_MS = 86400000;
+  const kstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const today = kstNow.toISOString().slice(0, 10);
+  const yesterday = new Date(kstNow.getTime() - DAY_MS).toISOString().slice(0, 10);
 
-  // 요일별 날짜 계산
-  const todayDate = new Date();
-  const dow = todayDate.getDay();
-  const getDate = (diff) => {
-    const d = new Date(todayDate);
-    d.setDate(todayDate.getDate() + diff);
-    return d.toISOString().slice(0,10);
-  };
+  // 요일별 날짜 계산 (한국 시간 기준)
+  const dow = kstNow.getUTCDay(); // 0=일,1=월,...,6=토
+  const getDate = (diff) => new Date(kstNow.getTime() + diff * DAY_MS).toISOString().slice(0, 10);
   const days = ['일','월','화','수','목','금','토'];
   const thisWeek = days.map((n,d) => `이번주${n}요일=${getDate(d-dow)}`).join(', ');
   const lastWeek = days.map((n,d) => `지난주${n}요일=${getDate(d-dow-7)}`).join(', ');
